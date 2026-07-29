@@ -96,7 +96,7 @@ export function RouteMap({ from, to, progress = 60, hubs, className, compact }: 
 
         {/* vehicle */}
         <g transform={`translate(${cx - 14} ${cy - 14})`}>
-          <circle cx="14" cy="14" r="22" fill="oklch(var(--primary) / 0.18)" className="animate-pulse-dot" />
+          <circle cx="14" cy="14" r="22" fill="var(--primary)" fillOpacity="0.18" className="animate-pulse-dot" />
           <circle cx="14" cy="14" r="14" fill="var(--primary)" />
           <g transform="translate(6,6)" stroke="white" strokeWidth="1.6" fill="none">
             <path d="M1 8 h9 v-4 h3 l2 3 v5 h-14 z" />
