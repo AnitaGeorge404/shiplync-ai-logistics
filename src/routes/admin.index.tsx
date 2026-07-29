@@ -88,15 +88,15 @@ function AdminDashboard() {
               </defs>
               <path
                 d="M 30 8 L 68 8 L 82 24 L 88 48 L 82 68 L 62 92 L 52 96 L 44 92 L 30 78 L 18 60 L 14 40 L 22 22 Z"
-                fill="oklch(var(--card))"
-                stroke="oklch(var(--border))"
+                fill="var(--card)"
+                stroke="var(--border)"
                 strokeWidth="0.4"
               />
               {[["Delhi", 42, 22], ["Mumbai", 28, 58], ["Bengaluru", 46, 82], ["Chennai", 58, 84], ["Hyderabad", 50, 66], ["Kolkata", 74, 46]].map(([n, x, y]) => (
                 <g key={n as string}>
                   <circle cx={x as number} cy={y as number} r="6" fill="url(#cityGlow)" />
                   <circle cx={x as number} cy={y as number} r="1.4" fill="oklch(0.52 0.19 258)" />
-                  <text x={(x as number) + 2.4} y={(y as number) + 0.8} fontSize="2.2" fill="oklch(var(--muted-foreground))">{n as string}</text>
+                  <text x={(x as number) + 2.4} y={(y as number) + 0.8} fontSize="2.2" fill="var(--muted-foreground)">{n as string}</text>
                 </g>
               ))}
               {fleetDots.map((d, i) => (
@@ -151,10 +151,10 @@ function AdminDashboard() {
                     <stop offset="100%" stopColor="oklch(0.72 0.13 195)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--border))" vertical={false} />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "oklch(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "oklch(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                <RTooltip contentStyle={{ borderRadius: 12, border: "1px solid oklch(var(--border))", background: "oklch(var(--card))" }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                <RTooltip contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--card)" }} />
                 <Area type="monotone" dataKey="shipments" stroke="oklch(0.52 0.19 258)" strokeWidth={2} fill="url(#a1)" />
                 <Area type="monotone" dataKey="delivered" stroke="oklch(0.72 0.13 195)" strokeWidth={2} fill="url(#a2)" />
               </AreaChart>
@@ -171,7 +171,7 @@ function AdminDashboard() {
                 <Pie data={analytics.categoryMix} dataKey="value" innerRadius={45} outerRadius={80} paddingAngle={4}>
                   {analytics.categoryMix.map((_, i) => (<Cell key={i} fill={CHART_COLORS[i]} />))}
                 </Pie>
-                <RTooltip contentStyle={{ borderRadius: 12, border: "1px solid oklch(var(--border))", background: "oklch(var(--card))" }} />
+                <RTooltip contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--card)" }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -210,10 +210,10 @@ function AdminDashboard() {
           <div className="h-56 mt-2">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={analytics.eta}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--border))" vertical={false} />
-                <XAxis dataKey="hour" tick={{ fontSize: 11, fill: "oklch(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "oklch(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                <RTooltip contentStyle={{ borderRadius: 12, border: "1px solid oklch(var(--border))", background: "oklch(var(--card))" }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="hour" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                <RTooltip contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--card)" }} />
                 <Line type="monotone" dataKey="predicted" stroke="oklch(0.72 0.13 195)" strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="actual" stroke="oklch(0.52 0.19 258)" strokeWidth={2} dot={false} />
               </LineChart>
@@ -227,10 +227,10 @@ function AdminDashboard() {
           <div className="h-56 mt-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={analytics.volume}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--border))" vertical={false} />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "oklch(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "oklch(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                <RTooltip contentStyle={{ borderRadius: 12, border: "1px solid oklch(var(--border))", background: "oklch(var(--card))" }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                <RTooltip contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--card)" }} />
                 <Bar dataKey="delivered" fill="oklch(0.68 0.16 155)" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
