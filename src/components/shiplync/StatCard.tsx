@@ -16,7 +16,7 @@ export function StatCard({ label, value, delta, trend = "up", icon, hint, accent
     <div className="card-elevated p-5 relative overflow-hidden group">
       <div
         className="absolute inset-x-0 top-0 h-0.5"
-        style={{ background: accent ?? "linear-gradient(90deg, oklch(var(--primary)), oklch(var(--accent)))" }}
+        style={{ background: accent ?? "linear-gradient(90deg, var(--primary), var(--accent))" }}
       />
       <div className="flex items-start justify-between">
         <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</div>
