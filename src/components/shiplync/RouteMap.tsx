@@ -36,20 +36,9 @@ export function RouteMap({ from, to, progress = 60, hubs, className, compact }: 
   const cy = points[idx][1] + (points[idx + 1][1] - points[idx][1]) * localT;
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/5 via-background to-accent/5 ${className ?? ""}`}>
+    <div className={`relative overflow-hidden rounded-2xl border bg-card ${className ?? ""}`}>
       <div className="absolute inset-0 grid-pattern opacity-40" />
       <svg viewBox="0 0 900 380" className="w-full h-full block" preserveAspectRatio="xMidYMid slice">
-        <defs>
-          <linearGradient id="routeGrad" x1="0" x2="1">
-            <stop offset="0%" stopColor="oklch(0.72 0.13 195)" />
-            <stop offset="100%" stopColor="oklch(0.52 0.19 258)" />
-          </linearGradient>
-          <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="oklch(0.52 0.19 258 / 0.4)" />
-            <stop offset="100%" stopColor="oklch(0.52 0.19 258 / 0)" />
-          </radialGradient>
-        </defs>
-
         {/* landmasses (abstract) */}
         <path
           d="M 0 300 Q 200 220, 380 280 T 780 260 T 900 300 L 900 380 L 0 380 Z"
@@ -65,7 +54,7 @@ export function RouteMap({ from, to, progress = 60, hubs, className, compact }: 
         {/* full route dim */}
         <path d="M 40 260 C 160 120, 300 340, 460 200 S 720 80, 860 180" fill="none" stroke="var(--border)" strokeWidth="6" strokeLinecap="round" />
         {/* animated dashed traveled */}
-        <path d={path} fill="none" stroke="url(#routeGrad)" strokeWidth="4" strokeLinecap="round" className="route-dash" pathLength={100} strokeDasharray={`${p} ${100 - p}`} />
+        <path d={path} fill="none" stroke="hsl(var(--primary))" strokeWidth="4" strokeLinecap="round" className="route-dash" pathLength={100} strokeDasharray={`${p} ${100 - p}`} />
 
         {/* hubs */}
         {(hubs ?? [
@@ -85,12 +74,12 @@ export function RouteMap({ from, to, progress = 60, hubs, className, compact }: 
 
         {/* origin */}
         <g>
-          <circle cx="40" cy="260" r="30" fill="url(#glow)" />
+          <circle cx="40" cy="260" r="16" fill="var(--success)" fillOpacity="0.15" />
           <circle cx="40" cy="260" r="8" fill="var(--success)" />
         </g>
         {/* destination */}
         <g>
-          <circle cx="860" cy="180" r="30" fill="url(#glow)" />
+          <circle cx="860" cy="180" r="16" fill="var(--primary)" fillOpacity="0.15" />
           <circle cx="860" cy="180" r="8" fill="var(--primary)" />
         </g>
 

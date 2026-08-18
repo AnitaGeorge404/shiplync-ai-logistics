@@ -1,5 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Package2, User, Bike, Warehouse, LayoutDashboard, ArrowRight, Sparkles, Zap, ShieldCheck, MapPinned } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Package2, User, Bike, Warehouse, LayoutDashboard, ArrowRight, Sparkles, Zap, ShieldCheck, MapPinned, LogIn, LogOut } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -51,12 +53,25 @@ const portals = [
 ] as const;
 
 function Landing() {
+  const { user, isAuthenticated, openAuthModal, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleBookShipment = () => {
+    if (isAuthenticated) {
+      navigate({ to: "/customer/book" });
+    } else {
+      openAuthModal(() => {
+        navigate({ to: "/customer/book" });
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen">
       <header className="h-16 border-b bg-background/70 backdrop-blur-md sticky top-0 z-20">
         <div className="max-w-7xl mx-auto h-full px-6 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent grid place-items-center text-white">
+            <div className="h-8 w-8 rounded-lg bg-primary text-primary-foreground grid place-items-center">
               <Package2 className="h-4 w-4" />
             </div>
             <span className="font-display font-semibold tracking-tight">ShipLync</span>
@@ -65,17 +80,43 @@ function Landing() {
             </span>
           </Link>
           <nav className="hidden md:flex items-center gap-7 text-sm text-muted-foreground">
-            <a className="hover:text-foreground">Platform</a>
-            <a className="hover:text-foreground">Fleet AI</a>
-            <a className="hover:text-foreground">Enterprise</a>
-            <a className="hover:text-foreground">Pricing</a>
+            <a className="hover:text-foreground cursor-pointer">Platform</a>
+            <a className="hover:text-foreground cursor-pointer">Fleet AI</a>
+            <a className="hover:text-foreground cursor-pointer">Enterprise</a>
+            <a className="hover:text-foreground cursor-pointer">Pricing</a>
           </nav>
-          <Link
-            to="/customer"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-foreground text-background px-3.5 py-2 text-sm font-medium hover:opacity-90"
-          >
-            Launch app <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          <div className="flex items-center gap-3">
+            {isAuthenticated ? (
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-medium hidden sm:inline-block">
+                  Hi, {user?.name.split(" ")[0]}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={logout}
+                  className="gap-1.5 text-xs h-8"
+                >
+                  <LogOut className="h-3.5 w-3.5" /> Sign out
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openAuthModal()}
+                className="gap-1.5 text-xs h-8"
+              >
+                <LogIn className="h-3.5 w-3.5" /> Sign in
+              </Button>
+            )}
+            <Link
+              to="/customer"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-foreground text-background px-3.5 py-2 text-sm font-medium hover:opacity-90"
+            >
+              Launch app <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -99,12 +140,12 @@ function Landing() {
             >
               Open command center <ArrowRight className="h-4 w-4" />
             </Link>
-            <Link
-              to="/customer/book"
-              className="inline-flex items-center gap-1.5 rounded-lg border bg-card px-4 py-2.5 text-sm font-medium hover:bg-muted"
+            <button
+              onClick={handleBookShipment}
+              className="inline-flex items-center gap-1.5 rounded-lg border bg-card px-4 py-2.5 text-sm font-medium hover:bg-muted cursor-pointer transition-colors"
             >
               Book a shipment
-            </Link>
+            </button>
           </div>
         </div>
 
@@ -115,8 +156,7 @@ function Landing() {
               to={p.to}
               className="group card-elevated p-6 relative overflow-hidden hover:-translate-y-0.5 hover:shadow-lg transition-all"
             >
-              <div className={`absolute -top-10 -right-10 h-32 w-32 rounded-full bg-gradient-to-br ${p.grad} opacity-10 group-hover:opacity-20 transition-opacity`} />
-              <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${p.grad} grid place-items-center text-white shadow-sm`}>
+              <div className="h-10 w-10 rounded-lg bg-primary text-primary-foreground grid place-items-center shadow-sm">
                 <p.icon className="h-5 w-5" />
               </div>
               <div className="mt-4 text-[10px] uppercase tracking-widest text-muted-foreground">{p.tag}</div>

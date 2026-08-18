@@ -9,32 +9,44 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as HubRouteImport } from './routes/hub'
-import { Route as DriverRouteImport } from './routes/driver'
-import { Route as CustomerRouteImport } from './routes/customer'
-import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as HubIndexRouteImport } from './routes/hub.index'
-import { Route as DriverIndexRouteImport } from './routes/driver.index'
-import { Route as CustomerIndexRouteImport } from './routes/customer.index'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as CustomerRouteImport } from './routes/customer'
+import { Route as DriverRouteImport } from './routes/driver'
+import { Route as HubRouteImport } from './routes/hub'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
-import { Route as CustomerShipmentsRouteImport } from './routes/customer.shipments'
+import { Route as AdminExceptionsRouteImport } from './routes/admin.exceptions'
+import { Route as AdminFleetRouteImport } from './routes/admin.fleet'
+import { Route as AdminHubsRouteImport } from './routes/admin.hubs'
+import { Route as AdminMapRouteImport } from './routes/admin.map'
+import { Route as AdminNotificationsRouteImport } from './routes/admin.notifications'
+import { Route as AdminPaymentsRouteImport } from './routes/admin.payments'
+import { Route as AdminReportsRouteImport } from './routes/admin.reports'
+import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
+import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as CustomerIndexRouteImport } from './routes/customer.index'
 import { Route as CustomerBookRouteImport } from './routes/customer.book'
+import { Route as CustomerShipmentsRouteImport } from './routes/customer.shipments'
+import { Route as DriverIndexRouteImport } from './routes/driver.index'
+import { Route as DriverDeliveriesRouteImport } from './routes/driver.deliveries'
+import { Route as DriverEarningsRouteImport } from './routes/driver.earnings'
+import { Route as DriverExceptionsRouteImport } from './routes/driver.exceptions'
+import { Route as DriverMyRouteRouteImport } from './routes/driver.my-route'
+import { Route as DriverPerformanceRouteImport } from './routes/driver.performance'
+import { Route as HubIndexRouteImport } from './routes/hub.index'
+import { Route as HubAnalyticsRouteImport } from './routes/hub.analytics'
+import { Route as HubDispatchRouteImport } from './routes/hub.dispatch'
+import { Route as HubExceptionsRouteImport } from './routes/hub.exceptions'
+import { Route as HubIntakeRouteImport } from './routes/hub.intake'
+import { Route as HubLoadRouteImport } from './routes/hub.load'
+import { Route as HubMedicalRouteImport } from './routes/hub.medical'
+import { Route as CustomerTrackIndexRouteImport } from './routes/customer.track.index'
 import { Route as CustomerTrackIdRouteImport } from './routes/customer.track.$id'
 
-const HubRoute = HubRouteImport.update({
-  id: '/hub',
-  path: '/hub',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DriverRoute = DriverRouteImport.update({
-  id: '/driver',
-  path: '/driver',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CustomerRoute = CustomerRouteImport.update({
-  id: '/customer',
-  path: '/customer',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -42,39 +54,159 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const CustomerRoute = CustomerRouteImport.update({
+  id: '/customer',
+  path: '/customer',
   getParentRoute: () => rootRouteImport,
 } as any)
-const HubIndexRoute = HubIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => HubRoute,
+const DriverRoute = DriverRouteImport.update({
+  id: '/driver',
+  path: '/driver',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const DriverIndexRoute = DriverIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => DriverRoute,
+const HubRoute = HubRouteImport.update({
+  id: '/hub',
+  path: '/hub',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const CustomerIndexRoute = CustomerIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => CustomerRoute,
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AdminRoute,
 } as any)
-const CustomerShipmentsRoute = CustomerShipmentsRouteImport.update({
-  id: '/shipments',
-  path: '/shipments',
+const AdminExceptionsRoute = AdminExceptionsRouteImport.update({
+  id: '/exceptions',
+  path: '/exceptions',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminFleetRoute = AdminFleetRouteImport.update({
+  id: '/fleet',
+  path: '/fleet',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminHubsRoute = AdminHubsRouteImport.update({
+  id: '/hubs',
+  path: '/hubs',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminMapRoute = AdminMapRouteImport.update({
+  id: '/map',
+  path: '/map',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminNotificationsRoute = AdminNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminPaymentsRoute = AdminPaymentsRouteImport.update({
+  id: '/payments',
+  path: '/payments',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminReportsRoute = AdminReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AdminRoute,
+} as any)
+const CustomerIndexRoute = CustomerIndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => CustomerRoute,
 } as any)
 const CustomerBookRoute = CustomerBookRouteImport.update({
   id: '/book',
   path: '/book',
+  getParentRoute: () => CustomerRoute,
+} as any)
+const CustomerShipmentsRoute = CustomerShipmentsRouteImport.update({
+  id: '/shipments',
+  path: '/shipments',
+  getParentRoute: () => CustomerRoute,
+} as any)
+const DriverIndexRoute = DriverIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DriverRoute,
+} as any)
+const DriverDeliveriesRoute = DriverDeliveriesRouteImport.update({
+  id: '/deliveries',
+  path: '/deliveries',
+  getParentRoute: () => DriverRoute,
+} as any)
+const DriverEarningsRoute = DriverEarningsRouteImport.update({
+  id: '/earnings',
+  path: '/earnings',
+  getParentRoute: () => DriverRoute,
+} as any)
+const DriverExceptionsRoute = DriverExceptionsRouteImport.update({
+  id: '/exceptions',
+  path: '/exceptions',
+  getParentRoute: () => DriverRoute,
+} as any)
+const DriverMyRouteRoute = DriverMyRouteRouteImport.update({
+  id: '/my-route',
+  path: '/my-route',
+  getParentRoute: () => DriverRoute,
+} as any)
+const DriverPerformanceRoute = DriverPerformanceRouteImport.update({
+  id: '/performance',
+  path: '/performance',
+  getParentRoute: () => DriverRoute,
+} as any)
+const HubIndexRoute = HubIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => HubRoute,
+} as any)
+const HubAnalyticsRoute = HubAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => HubRoute,
+} as any)
+const HubDispatchRoute = HubDispatchRouteImport.update({
+  id: '/dispatch',
+  path: '/dispatch',
+  getParentRoute: () => HubRoute,
+} as any)
+const HubExceptionsRoute = HubExceptionsRouteImport.update({
+  id: '/exceptions',
+  path: '/exceptions',
+  getParentRoute: () => HubRoute,
+} as any)
+const HubIntakeRoute = HubIntakeRouteImport.update({
+  id: '/intake',
+  path: '/intake',
+  getParentRoute: () => HubRoute,
+} as any)
+const HubLoadRoute = HubLoadRouteImport.update({
+  id: '/load',
+  path: '/load',
+  getParentRoute: () => HubRoute,
+} as any)
+const HubMedicalRoute = HubMedicalRouteImport.update({
+  id: '/medical',
+  path: '/medical',
+  getParentRoute: () => HubRoute,
+} as any)
+const CustomerTrackIndexRoute = CustomerTrackIndexRouteImport.update({
+  id: '/track/',
+  path: '/track/',
   getParentRoute: () => CustomerRoute,
 } as any)
 const CustomerTrackIdRoute = CustomerTrackIdRouteImport.update({
@@ -89,23 +221,67 @@ export interface FileRoutesByFullPath {
   '/customer': typeof CustomerRouteWithChildren
   '/driver': typeof DriverRouteWithChildren
   '/hub': typeof HubRouteWithChildren
+  '/login': typeof LoginRoute
+  '/admin/exceptions': typeof AdminExceptionsRoute
+  '/admin/fleet': typeof AdminFleetRoute
+  '/admin/hubs': typeof AdminHubsRoute
+  '/admin/map': typeof AdminMapRoute
+  '/admin/notifications': typeof AdminNotificationsRoute
+  '/admin/payments': typeof AdminPaymentsRoute
+  '/admin/reports': typeof AdminReportsRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/customer/book': typeof CustomerBookRoute
   '/customer/shipments': typeof CustomerShipmentsRoute
+  '/driver/deliveries': typeof DriverDeliveriesRoute
+  '/driver/earnings': typeof DriverEarningsRoute
+  '/driver/exceptions': typeof DriverExceptionsRoute
+  '/driver/my-route': typeof DriverMyRouteRoute
+  '/driver/performance': typeof DriverPerformanceRoute
+  '/hub/analytics': typeof HubAnalyticsRoute
+  '/hub/dispatch': typeof HubDispatchRoute
+  '/hub/exceptions': typeof HubExceptionsRoute
+  '/hub/intake': typeof HubIntakeRoute
+  '/hub/load': typeof HubLoadRoute
+  '/hub/medical': typeof HubMedicalRoute
   '/admin/': typeof AdminIndexRoute
   '/customer/': typeof CustomerIndexRoute
   '/driver/': typeof DriverIndexRoute
   '/hub/': typeof HubIndexRoute
   '/customer/track/$id': typeof CustomerTrackIdRoute
+  '/customer/track/': typeof CustomerTrackIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/admin/exceptions': typeof AdminExceptionsRoute
+  '/admin/fleet': typeof AdminFleetRoute
+  '/admin/hubs': typeof AdminHubsRoute
+  '/admin/map': typeof AdminMapRoute
+  '/admin/notifications': typeof AdminNotificationsRoute
+  '/admin/payments': typeof AdminPaymentsRoute
+  '/admin/reports': typeof AdminReportsRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/customer/book': typeof CustomerBookRoute
   '/customer/shipments': typeof CustomerShipmentsRoute
+  '/driver/deliveries': typeof DriverDeliveriesRoute
+  '/driver/earnings': typeof DriverEarningsRoute
+  '/driver/exceptions': typeof DriverExceptionsRoute
+  '/driver/my-route': typeof DriverMyRouteRoute
+  '/driver/performance': typeof DriverPerformanceRoute
+  '/hub/analytics': typeof HubAnalyticsRoute
+  '/hub/dispatch': typeof HubDispatchRoute
+  '/hub/exceptions': typeof HubExceptionsRoute
+  '/hub/intake': typeof HubIntakeRoute
+  '/hub/load': typeof HubLoadRoute
+  '/hub/medical': typeof HubMedicalRoute
   '/admin': typeof AdminIndexRoute
   '/customer': typeof CustomerIndexRoute
   '/driver': typeof DriverIndexRoute
   '/hub': typeof HubIndexRoute
   '/customer/track/$id': typeof CustomerTrackIdRoute
+  '/customer/track': typeof CustomerTrackIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -114,13 +290,35 @@ export interface FileRoutesById {
   '/customer': typeof CustomerRouteWithChildren
   '/driver': typeof DriverRouteWithChildren
   '/hub': typeof HubRouteWithChildren
+  '/login': typeof LoginRoute
+  '/admin/exceptions': typeof AdminExceptionsRoute
+  '/admin/fleet': typeof AdminFleetRoute
+  '/admin/hubs': typeof AdminHubsRoute
+  '/admin/map': typeof AdminMapRoute
+  '/admin/notifications': typeof AdminNotificationsRoute
+  '/admin/payments': typeof AdminPaymentsRoute
+  '/admin/reports': typeof AdminReportsRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/customer/book': typeof CustomerBookRoute
   '/customer/shipments': typeof CustomerShipmentsRoute
+  '/driver/deliveries': typeof DriverDeliveriesRoute
+  '/driver/earnings': typeof DriverEarningsRoute
+  '/driver/exceptions': typeof DriverExceptionsRoute
+  '/driver/my-route': typeof DriverMyRouteRoute
+  '/driver/performance': typeof DriverPerformanceRoute
+  '/hub/analytics': typeof HubAnalyticsRoute
+  '/hub/dispatch': typeof HubDispatchRoute
+  '/hub/exceptions': typeof HubExceptionsRoute
+  '/hub/intake': typeof HubIntakeRoute
+  '/hub/load': typeof HubLoadRoute
+  '/hub/medical': typeof HubMedicalRoute
   '/admin/': typeof AdminIndexRoute
   '/customer/': typeof CustomerIndexRoute
   '/driver/': typeof DriverIndexRoute
   '/hub/': typeof HubIndexRoute
   '/customer/track/$id': typeof CustomerTrackIdRoute
+  '/customer/track/': typeof CustomerTrackIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -130,23 +328,67 @@ export interface FileRouteTypes {
     | '/customer'
     | '/driver'
     | '/hub'
+    | '/login'
+    | '/admin/exceptions'
+    | '/admin/fleet'
+    | '/admin/hubs'
+    | '/admin/map'
+    | '/admin/notifications'
+    | '/admin/payments'
+    | '/admin/reports'
+    | '/admin/settings'
+    | '/admin/users'
     | '/customer/book'
     | '/customer/shipments'
+    | '/driver/deliveries'
+    | '/driver/earnings'
+    | '/driver/exceptions'
+    | '/driver/my-route'
+    | '/driver/performance'
+    | '/hub/analytics'
+    | '/hub/dispatch'
+    | '/hub/exceptions'
+    | '/hub/intake'
+    | '/hub/load'
+    | '/hub/medical'
     | '/admin/'
     | '/customer/'
     | '/driver/'
     | '/hub/'
     | '/customer/track/$id'
+    | '/customer/track/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/login'
+    | '/admin/exceptions'
+    | '/admin/fleet'
+    | '/admin/hubs'
+    | '/admin/map'
+    | '/admin/notifications'
+    | '/admin/payments'
+    | '/admin/reports'
+    | '/admin/settings'
+    | '/admin/users'
     | '/customer/book'
     | '/customer/shipments'
+    | '/driver/deliveries'
+    | '/driver/earnings'
+    | '/driver/exceptions'
+    | '/driver/my-route'
+    | '/driver/performance'
+    | '/hub/analytics'
+    | '/hub/dispatch'
+    | '/hub/exceptions'
+    | '/hub/intake'
+    | '/hub/load'
+    | '/hub/medical'
     | '/admin'
     | '/customer'
     | '/driver'
     | '/hub'
     | '/customer/track/$id'
+    | '/customer/track'
   id:
     | '__root__'
     | '/'
@@ -154,13 +396,35 @@ export interface FileRouteTypes {
     | '/customer'
     | '/driver'
     | '/hub'
+    | '/login'
+    | '/admin/exceptions'
+    | '/admin/fleet'
+    | '/admin/hubs'
+    | '/admin/map'
+    | '/admin/notifications'
+    | '/admin/payments'
+    | '/admin/reports'
+    | '/admin/settings'
+    | '/admin/users'
     | '/customer/book'
     | '/customer/shipments'
+    | '/driver/deliveries'
+    | '/driver/earnings'
+    | '/driver/exceptions'
+    | '/driver/my-route'
+    | '/driver/performance'
+    | '/hub/analytics'
+    | '/hub/dispatch'
+    | '/hub/exceptions'
+    | '/hub/intake'
+    | '/hub/load'
+    | '/hub/medical'
     | '/admin/'
     | '/customer/'
     | '/driver/'
     | '/hub/'
     | '/customer/track/$id'
+    | '/customer/track/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -169,29 +433,16 @@ export interface RootRouteChildren {
   CustomerRoute: typeof CustomerRouteWithChildren
   DriverRoute: typeof DriverRouteWithChildren
   HubRoute: typeof HubRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/hub': {
-      id: '/hub'
-      path: '/hub'
-      fullPath: '/hub'
-      preLoaderRoute: typeof HubRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/driver': {
-      id: '/driver'
-      path: '/driver'
-      fullPath: '/driver'
-      preLoaderRoute: typeof DriverRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/customer': {
-      id: '/customer'
-      path: '/customer'
-      fullPath: '/customer'
-      preLoaderRoute: typeof CustomerRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -201,33 +452,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/customer': {
+      id: '/customer'
+      path: '/customer'
+      fullPath: '/customer'
+      preLoaderRoute: typeof CustomerRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/hub/': {
-      id: '/hub/'
-      path: '/'
-      fullPath: '/hub/'
-      preLoaderRoute: typeof HubIndexRouteImport
-      parentRoute: typeof HubRoute
+    '/driver': {
+      id: '/driver'
+      path: '/driver'
+      fullPath: '/driver'
+      preLoaderRoute: typeof DriverRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/driver/': {
-      id: '/driver/'
-      path: '/'
-      fullPath: '/driver/'
-      preLoaderRoute: typeof DriverIndexRouteImport
-      parentRoute: typeof DriverRoute
+    '/hub': {
+      id: '/hub'
+      path: '/hub'
+      fullPath: '/hub'
+      preLoaderRoute: typeof HubRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/customer/': {
-      id: '/customer/'
-      path: '/'
-      fullPath: '/customer/'
-      preLoaderRoute: typeof CustomerIndexRouteImport
-      parentRoute: typeof CustomerRoute
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/': {
       id: '/admin/'
@@ -236,11 +487,74 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/customer/shipments': {
-      id: '/customer/shipments'
-      path: '/shipments'
-      fullPath: '/customer/shipments'
-      preLoaderRoute: typeof CustomerShipmentsRouteImport
+    '/admin/exceptions': {
+      id: '/admin/exceptions'
+      path: '/exceptions'
+      fullPath: '/admin/exceptions'
+      preLoaderRoute: typeof AdminExceptionsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/fleet': {
+      id: '/admin/fleet'
+      path: '/fleet'
+      fullPath: '/admin/fleet'
+      preLoaderRoute: typeof AdminFleetRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/hubs': {
+      id: '/admin/hubs'
+      path: '/hubs'
+      fullPath: '/admin/hubs'
+      preLoaderRoute: typeof AdminHubsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/map': {
+      id: '/admin/map'
+      path: '/map'
+      fullPath: '/admin/map'
+      preLoaderRoute: typeof AdminMapRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/notifications': {
+      id: '/admin/notifications'
+      path: '/notifications'
+      fullPath: '/admin/notifications'
+      preLoaderRoute: typeof AdminNotificationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/payments': {
+      id: '/admin/payments'
+      path: '/payments'
+      fullPath: '/admin/payments'
+      preLoaderRoute: typeof AdminPaymentsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/reports': {
+      id: '/admin/reports'
+      path: '/reports'
+      fullPath: '/admin/reports'
+      preLoaderRoute: typeof AdminReportsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/customer/': {
+      id: '/customer/'
+      path: '/'
+      fullPath: '/customer/'
+      preLoaderRoute: typeof CustomerIndexRouteImport
       parentRoute: typeof CustomerRoute
     }
     '/customer/book': {
@@ -248,6 +562,111 @@ declare module '@tanstack/react-router' {
       path: '/book'
       fullPath: '/customer/book'
       preLoaderRoute: typeof CustomerBookRouteImport
+      parentRoute: typeof CustomerRoute
+    }
+    '/customer/shipments': {
+      id: '/customer/shipments'
+      path: '/shipments'
+      fullPath: '/customer/shipments'
+      preLoaderRoute: typeof CustomerShipmentsRouteImport
+      parentRoute: typeof CustomerRoute
+    }
+    '/driver/': {
+      id: '/driver/'
+      path: '/'
+      fullPath: '/driver/'
+      preLoaderRoute: typeof DriverIndexRouteImport
+      parentRoute: typeof DriverRoute
+    }
+    '/driver/deliveries': {
+      id: '/driver/deliveries'
+      path: '/deliveries'
+      fullPath: '/driver/deliveries'
+      preLoaderRoute: typeof DriverDeliveriesRouteImport
+      parentRoute: typeof DriverRoute
+    }
+    '/driver/earnings': {
+      id: '/driver/earnings'
+      path: '/earnings'
+      fullPath: '/driver/earnings'
+      preLoaderRoute: typeof DriverEarningsRouteImport
+      parentRoute: typeof DriverRoute
+    }
+    '/driver/exceptions': {
+      id: '/driver/exceptions'
+      path: '/exceptions'
+      fullPath: '/driver/exceptions'
+      preLoaderRoute: typeof DriverExceptionsRouteImport
+      parentRoute: typeof DriverRoute
+    }
+    '/driver/my-route': {
+      id: '/driver/my-route'
+      path: '/my-route'
+      fullPath: '/driver/my-route'
+      preLoaderRoute: typeof DriverMyRouteRouteImport
+      parentRoute: typeof DriverRoute
+    }
+    '/driver/performance': {
+      id: '/driver/performance'
+      path: '/performance'
+      fullPath: '/driver/performance'
+      preLoaderRoute: typeof DriverPerformanceRouteImport
+      parentRoute: typeof DriverRoute
+    }
+    '/hub/': {
+      id: '/hub/'
+      path: '/'
+      fullPath: '/hub/'
+      preLoaderRoute: typeof HubIndexRouteImport
+      parentRoute: typeof HubRoute
+    }
+    '/hub/analytics': {
+      id: '/hub/analytics'
+      path: '/analytics'
+      fullPath: '/hub/analytics'
+      preLoaderRoute: typeof HubAnalyticsRouteImport
+      parentRoute: typeof HubRoute
+    }
+    '/hub/dispatch': {
+      id: '/hub/dispatch'
+      path: '/dispatch'
+      fullPath: '/hub/dispatch'
+      preLoaderRoute: typeof HubDispatchRouteImport
+      parentRoute: typeof HubRoute
+    }
+    '/hub/exceptions': {
+      id: '/hub/exceptions'
+      path: '/exceptions'
+      fullPath: '/hub/exceptions'
+      preLoaderRoute: typeof HubExceptionsRouteImport
+      parentRoute: typeof HubRoute
+    }
+    '/hub/intake': {
+      id: '/hub/intake'
+      path: '/intake'
+      fullPath: '/hub/intake'
+      preLoaderRoute: typeof HubIntakeRouteImport
+      parentRoute: typeof HubRoute
+    }
+    '/hub/load': {
+      id: '/hub/load'
+      path: '/load'
+      fullPath: '/hub/load'
+      preLoaderRoute: typeof HubLoadRouteImport
+      parentRoute: typeof HubRoute
+    }
+    '/hub/medical': {
+      id: '/hub/medical'
+      path: '/medical'
+      fullPath: '/hub/medical'
+      preLoaderRoute: typeof HubMedicalRouteImport
+      parentRoute: typeof HubRoute
+    }
+    '/customer/track/': {
+      id: '/customer/track/'
+      path: '/track'
+      fullPath: '/customer/track/'
+      preLoaderRoute: typeof CustomerTrackIndexRouteImport
       parentRoute: typeof CustomerRoute
     }
     '/customer/track/$id': {
@@ -261,10 +680,28 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteChildren {
+  AdminExceptionsRoute: typeof AdminExceptionsRoute
+  AdminFleetRoute: typeof AdminFleetRoute
+  AdminHubsRoute: typeof AdminHubsRoute
+  AdminMapRoute: typeof AdminMapRoute
+  AdminNotificationsRoute: typeof AdminNotificationsRoute
+  AdminPaymentsRoute: typeof AdminPaymentsRoute
+  AdminReportsRoute: typeof AdminReportsRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminUsersRoute: typeof AdminUsersRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminExceptionsRoute: AdminExceptionsRoute,
+  AdminFleetRoute: AdminFleetRoute,
+  AdminHubsRoute: AdminHubsRoute,
+  AdminMapRoute: AdminMapRoute,
+  AdminNotificationsRoute: AdminNotificationsRoute,
+  AdminPaymentsRoute: AdminPaymentsRoute,
+  AdminReportsRoute: AdminReportsRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
+  AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,
 }
 
@@ -275,6 +712,7 @@ interface CustomerRouteChildren {
   CustomerShipmentsRoute: typeof CustomerShipmentsRoute
   CustomerIndexRoute: typeof CustomerIndexRoute
   CustomerTrackIdRoute: typeof CustomerTrackIdRoute
+  CustomerTrackIndexRoute: typeof CustomerTrackIndexRoute
 }
 
 const CustomerRouteChildren: CustomerRouteChildren = {
@@ -282,6 +720,7 @@ const CustomerRouteChildren: CustomerRouteChildren = {
   CustomerShipmentsRoute: CustomerShipmentsRoute,
   CustomerIndexRoute: CustomerIndexRoute,
   CustomerTrackIdRoute: CustomerTrackIdRoute,
+  CustomerTrackIndexRoute: CustomerTrackIndexRoute,
 }
 
 const CustomerRouteWithChildren = CustomerRoute._addFileChildren(
@@ -289,10 +728,20 @@ const CustomerRouteWithChildren = CustomerRoute._addFileChildren(
 )
 
 interface DriverRouteChildren {
+  DriverDeliveriesRoute: typeof DriverDeliveriesRoute
+  DriverEarningsRoute: typeof DriverEarningsRoute
+  DriverExceptionsRoute: typeof DriverExceptionsRoute
+  DriverMyRouteRoute: typeof DriverMyRouteRoute
+  DriverPerformanceRoute: typeof DriverPerformanceRoute
   DriverIndexRoute: typeof DriverIndexRoute
 }
 
 const DriverRouteChildren: DriverRouteChildren = {
+  DriverDeliveriesRoute: DriverDeliveriesRoute,
+  DriverEarningsRoute: DriverEarningsRoute,
+  DriverExceptionsRoute: DriverExceptionsRoute,
+  DriverMyRouteRoute: DriverMyRouteRoute,
+  DriverPerformanceRoute: DriverPerformanceRoute,
   DriverIndexRoute: DriverIndexRoute,
 }
 
@@ -300,10 +749,22 @@ const DriverRouteWithChildren =
   DriverRoute._addFileChildren(DriverRouteChildren)
 
 interface HubRouteChildren {
+  HubAnalyticsRoute: typeof HubAnalyticsRoute
+  HubDispatchRoute: typeof HubDispatchRoute
+  HubExceptionsRoute: typeof HubExceptionsRoute
+  HubIntakeRoute: typeof HubIntakeRoute
+  HubLoadRoute: typeof HubLoadRoute
+  HubMedicalRoute: typeof HubMedicalRoute
   HubIndexRoute: typeof HubIndexRoute
 }
 
 const HubRouteChildren: HubRouteChildren = {
+  HubAnalyticsRoute: HubAnalyticsRoute,
+  HubDispatchRoute: HubDispatchRoute,
+  HubExceptionsRoute: HubExceptionsRoute,
+  HubIntakeRoute: HubIntakeRoute,
+  HubLoadRoute: HubLoadRoute,
+  HubMedicalRoute: HubMedicalRoute,
   HubIndexRoute: HubIndexRoute,
 }
 
@@ -315,7 +776,18 @@ const rootRouteChildren: RootRouteChildren = {
   CustomerRoute: CustomerRouteWithChildren,
   DriverRoute: DriverRouteWithChildren,
   HubRoute: HubRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

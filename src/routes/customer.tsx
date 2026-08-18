@@ -16,7 +16,7 @@ export const Route = createFileRoute("/customer")({
   component: () => (
     <PortalShell
       portal="Customer"
-      accent="linear-gradient(135deg, oklch(0.52 0.19 258), oklch(0.66 0.14 235))"
+      accent="oklch(0.52 0.19 258)"
       nav={[
         { to: "/customer", label: "Dashboard", icon: <Home /> },
         { to: "/customer/book", label: "Book shipment", icon: <PackagePlus />, badge: "New" },

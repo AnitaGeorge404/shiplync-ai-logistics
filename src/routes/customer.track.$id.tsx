@@ -71,7 +71,7 @@ function TrackShipment() {
             <div className="card-elevated p-5">
               <div className="text-xs uppercase tracking-widest text-muted-foreground">Delivery partner</div>
               <div className="mt-3 flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary to-accent grid place-items-center text-white font-semibold">
+                <div className="h-12 w-12 rounded-full bg-primary text-primary-foreground grid place-items-center font-semibold">
                   {s.driver.split(" ").map((w: string) => w[0]).join("")}
                 </div>
                 <div>
@@ -88,7 +88,7 @@ function TrackShipment() {
             </div>
           )}
 
-          <div className="card-elevated p-5 bg-gradient-to-br from-primary/8 via-card to-accent/8">
+          <div className="card-elevated p-5 bg-muted/40">
             <div className="flex items-center gap-2 text-xs font-medium text-primary">
               <Sparkles className="h-3.5 w-3.5" /> AI ETA engine
             </div>

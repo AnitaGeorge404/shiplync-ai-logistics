@@ -5,7 +5,9 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Check, MapPin, Package, CreditCard, Sparkles, ShieldCheck, Zap, Leaf, ArrowRight, Copy } from "lucide-react";
+import { Check, MapPin, Package, CreditCard, Sparkles, ShieldCheck, Zap, Leaf, ArrowRight, Copy, LogIn } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { LoginForm } from "@/components/auth/LoginForm";
 
 export const Route = createFileRoute("/customer/book")({
   head: () => ({
@@ -20,6 +22,7 @@ export const Route = createFileRoute("/customer/book")({
 const steps = ["Addresses", "Parcel", "Cost", "Confirm"];
 
 function BookShipment() {
+  const { user, isAuthenticated } = useAuth();
   const [step, setStep] = useState(0);
   const [pkg, setPkg] = useState<"standard" | "express" | "medical" | "fragile">("express");
   const [insurance, setInsurance] = useState(true);
@@ -27,6 +30,25 @@ function BookShipment() {
   const base = pkg === "express" ? 220 : pkg === "medical" ? 480 : pkg === "fragile" ? 180 : 120;
   const cost = Math.round(base + weight * 60 + (insurance ? 45 : 0));
   const tracking = "SLX-" + Math.floor(70000 + Math.random() * 9000) + "-IN";
+
+  if (!isAuthenticated) {
+    return (
+      <div className="max-w-xl mx-auto py-6 space-y-6">
+        <div>
+          <div className="text-xs uppercase tracking-widest text-muted-foreground">New shipment</div>
+          <h1 className="font-display text-3xl font-semibold mt-1">Book a Shipment</h1>
+        </div>
+
+        <div className="card-elevated p-6 sm:p-8 bg-background border rounded-2xl shadow-xl">
+          <LoginForm
+            title="Sign in to continue"
+            subtitle="Please sign in or create an account to book your shipment and track deliveries."
+            compact
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -56,8 +78,8 @@ function BookShipment() {
               <div>
                 <div className="flex items-center gap-2 text-sm font-medium"><MapPin className="h-4 w-4 text-success" /> Pickup address</div>
                 <div className="grid sm:grid-cols-2 gap-3 mt-3">
-                  <div><Label>Full name</Label><Input defaultValue="Aditi Kapoor" /></div>
-                  <div><Label>Phone</Label><Input defaultValue="+91 98••• ••210" /></div>
+                  <div><Label>Full name</Label><Input defaultValue={user?.name || "Aditi Kapoor"} /></div>
+                  <div><Label>Phone</Label><Input defaultValue={user?.phone || "+91 98765 43210"} /></div>
                   <div className="sm:col-span-2"><Label>Address</Label><Input defaultValue="88 Marine Drive, Mumbai 400002" /></div>
                 </div>
               </div>
@@ -110,7 +132,7 @@ function BookShipment() {
 
           {step === 2 && (
             <div className="space-y-4">
-              <div className="rounded-xl border p-5 bg-gradient-to-br from-primary/5 to-accent/5">
+              <div className="rounded-xl border p-5 bg-muted/40">
                 <div className="text-xs uppercase tracking-widest text-muted-foreground">AI cost estimation</div>
                 <div className="mt-1 font-display text-4xl font-semibold">₹{cost}</div>
                 <div className="text-xs text-muted-foreground mt-1">Includes AI-optimized routing and CO₂-neutral offset.</div>
