@@ -1,10 +1,11 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Bell, Search, Command, Package2, Moon, Sun } from "lucide-react";
+import { Bell, Search, Command, Package2, Moon, Sun, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 
 export type NavItem = { to: string; label: string; icon: ReactNode; badge?: string };
 
@@ -17,6 +18,7 @@ type Props = {
 
 export function PortalShell({ portal, accent, nav, children }: Props) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { user, logout, openAuthModal } = useAuth();
   const [dark, setDark] = useState(false);
   useEffect(() => {
     const root = document.documentElement;
@@ -61,7 +63,7 @@ export function PortalShell({ portal, accent, nav, children }: Props) {
           })}
         </nav>
         <div className="p-3 border-t">
-          <div className="rounded-lg p-3 bg-gradient-to-br from-primary/10 to-accent/10 border">
+          <div className="rounded-lg p-3 bg-muted/60 border">
             <div className="text-xs font-medium">AI Coordinator</div>
             <div className="text-[11px] text-muted-foreground mt-0.5">
               Optimizing 1,284 shipments in real time
@@ -77,7 +79,7 @@ export function PortalShell({ portal, accent, nav, children }: Props) {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 border-b bg-background/70 backdrop-blur-md sticky top-0 z-20 flex items-center gap-3 px-4 lg:px-8">
           <div className="lg:hidden flex items-center gap-2 mr-1">
-            <div className="h-7 w-7 rounded-md grid place-items-center text-white" style={{ background: accent }}>
+            <div className="h-7 w-7 rounded-md grid place-items-center text-primary-foreground bg-primary">
               <Package2 className="h-3.5 w-3.5" />
             </div>
             <span className="font-display font-semibold">ShipLync</span>
@@ -100,9 +102,25 @@ export function PortalShell({ portal, accent, nav, children }: Props) {
               <Bell className="h-4 w-4" />
               <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-destructive" />
             </Button>
-            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-accent grid place-items-center text-white text-xs font-medium ml-1">
-              SL
-            </div>
+            {user ? (
+              <div className="flex items-center gap-2 ml-1 cursor-pointer" onClick={logout} title="Click to sign out">
+                <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground grid place-items-center text-xs font-semibold shadow-sm">
+                  {user.name.split(" ").map((n) => n[0]).join("").toUpperCase()}
+                </div>
+                <span className="text-xs font-medium hidden sm:inline-block max-w-[100px] truncate">
+                  {user.name}
+                </span>
+              </div>
+            ) : (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => openAuthModal()}
+                className="gap-1.5 text-xs h-8 ml-1"
+              >
+                <LogIn className="h-3.5 w-3.5" /> Sign in
+              </Button>
+            )}
           </div>
         </header>
         <main className="flex-1 p-4 lg:p-8 max-w-[1600px] w-full mx-auto">{children}</main>

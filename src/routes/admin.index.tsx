@@ -59,8 +59,8 @@ function AdminDashboard() {
         <StatCard label="Total shipments" value="24,819" delta="+8.4%" icon={<Package />} />
         <StatCard label="Delivered today" value="3,712" delta="+412" icon={<CheckCircle2 />} />
         <StatCard label="Active" value="1,284" delta="Real-time" icon={<Truck />} />
-        <StatCard label="Failed" value="42" delta="−12" trend="down" icon={<AlertTriangle />} accent="linear-gradient(90deg, oklch(0.62 0.24 15), oklch(0.78 0.16 75))" />
-        <StatCard label="Medical" value="187" hint="99.4% on-time" icon={<HeartPulse />} accent="linear-gradient(90deg, oklch(0.62 0.24 15), oklch(0.52 0.19 258))" />
+        <StatCard label="Failed" value="42" delta="−12" trend="down" icon={<AlertTriangle />} />
+        <StatCard label="Medical" value="187" hint="99.4% on-time" icon={<HeartPulse />} />
         <StatCard label="Revenue" value="₹42.1L" delta="+12%" icon={<IndianRupee />} />
       </div>
 
@@ -77,7 +77,7 @@ function AdminDashboard() {
               <Legend2 c="oklch(0.62 0.24 15)" l="Exception" />
             </div>
           </div>
-          <div className="relative rounded-xl border overflow-hidden bg-gradient-to-br from-primary/5 to-accent/5 h-96">
+          <div className="relative rounded-xl border overflow-hidden bg-card h-96">
             <div className="absolute inset-0 grid-pattern opacity-40" />
             <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
               <defs>
@@ -112,7 +112,7 @@ function AdminDashboard() {
           </div>
         </div>
 
-        <div className="card-elevated p-5 bg-gradient-to-br from-primary/8 via-card to-accent/8">
+        <div className="card-elevated p-5 bg-muted/40">
           <div className="flex items-center gap-2 text-xs font-medium text-primary"><Sparkles className="h-3.5 w-3.5" /> AI insights · today</div>
           <ul className="mt-4 space-y-3 text-sm">
             <Insight t="Reroute 40 packages BOM → PUN" d="Save 42 min · avoid Andheri jam" tone="primary" />
@@ -256,7 +256,7 @@ function AdminDashboard() {
                 <div className="col-span-2 text-xs">{s.packageType}</div>
                 <div className="col-span-3">
                   <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-primary to-accent" style={{ width: s.progress + "%" }} />
+                    <div className="h-full bg-primary" style={{ width: s.progress + "%" }} />
                   </div>
                   <div className="text-[10px] text-muted-foreground mt-1">{s.progress}%</div>
                 </div>

@@ -92,7 +92,7 @@ function DriverDashboard() {
             <div className="font-display font-semibold">Today's stops</div>
             <div className="text-xs text-muted-foreground">Sequence optimized by AI · reorder disabled</div>
           </div>
-          <Link to="/driver/route" className="text-xs text-primary font-medium hover:underline">Open route →</Link>
+          <Link to="/driver/my-route" className="text-xs text-primary font-medium hover:underline">Open route →</Link>
         </div>
         <div className="divide-y">
           {stops.map((s, i) => (

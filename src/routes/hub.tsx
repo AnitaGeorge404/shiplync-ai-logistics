@@ -9,7 +9,7 @@ export const Route = createFileRoute("/hub")({
   component: () => (
     <PortalShell
       portal="Hub Ops"
-      accent="linear-gradient(135deg, oklch(0.78 0.16 75), oklch(0.62 0.24 15))"
+      accent="oklch(0.78 0.16 75)"
       nav={[
         { to: "/hub", label: "Control room", icon: <Home /> },
         { to: "/hub/intake", label: "Intake & scan", icon: <ScanLine /> },

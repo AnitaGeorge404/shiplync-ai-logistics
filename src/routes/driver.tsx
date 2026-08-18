@@ -9,10 +9,10 @@ export const Route = createFileRoute("/driver")({
   component: () => (
     <PortalShell
       portal="Delivery Partner"
-      accent="linear-gradient(135deg, oklch(0.68 0.16 155), oklch(0.72 0.13 195))"
+      accent="oklch(0.68 0.16 155)"
       nav={[
         { to: "/driver", label: "Today", icon: <Home /> },
-        { to: "/driver/route", label: "My route", icon: <RouteIcon />, badge: "6" },
+        { to: "/driver/my-route", label: "My route", icon: <RouteIcon />, badge: "6" },
         { to: "/driver/deliveries", label: "Deliveries", icon: <ListChecks /> },
         { to: "/driver/earnings", label: "Earnings", icon: <Wallet /> },
         { to: "/driver/performance", label: "Performance", icon: <TrendingUp /> },

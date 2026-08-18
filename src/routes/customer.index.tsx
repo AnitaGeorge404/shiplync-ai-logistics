@@ -1,29 +1,42 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { shipments } from "@/lib/mock-data";
 import { StatCard } from "@/components/shiplync/StatCard";
 import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { RouteMap } from "@/components/shiplync/RouteMap";
 import { Button } from "@/components/ui/button";
 import { Package, Truck, CheckCircle2, Clock, ArrowRight, Sparkles, ShieldPlus, Leaf } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute("/customer/")({
   component: CustomerDashboard,
 });
 
 function CustomerDashboard() {
+  const { user, isAuthenticated, openAuthModal } = useAuth();
+  const navigate = useNavigate();
   const active = shipments.filter((s) => !["delivered", "returned"].includes(s.status));
   const featured = shipments[0];
+
+  const handleBookShipment = () => {
+    if (isAuthenticated) {
+      navigate({ to: "/customer/book" });
+    } else {
+      openAuthModal(() => navigate({ to: "/customer/book" }));
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">Good afternoon, Aditi</div>
+          <div className="text-xs uppercase tracking-widest text-muted-foreground">
+            Good afternoon, {user ? user.name.split(" ")[0] : "Aditi"}
+          </div>
           <h1 className="mt-1 font-display text-3xl font-semibold">Your logistics, in real time.</h1>
         </div>
-        <Link to="/customer/book">
-          <Button className="gap-1.5">Book new shipment <ArrowRight className="h-4 w-4" /></Button>
-        </Link>
+        <Button onClick={handleBookShipment} className="gap-1.5 cursor-pointer">
+          Book new shipment <ArrowRight className="h-4 w-4" />
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -66,7 +79,7 @@ function CustomerDashboard() {
         </div>
 
         <div className="space-y-4">
-          <div className="card-elevated p-5 bg-gradient-to-br from-primary/8 via-card to-accent/8">
+          <div className="card-elevated p-5 bg-muted/40">
             <div className="flex items-center gap-2 text-xs font-medium text-primary">
               <Sparkles className="h-3.5 w-3.5" /> AI Suggestions
             </div>
@@ -133,7 +146,7 @@ function CustomerDashboard() {
               <div className="col-span-2 text-xs text-muted-foreground">{s.packageType} · {s.weight} kg</div>
               <div className="col-span-3">
                 <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-primary to-accent" style={{ width: s.progress + "%" }} />
+                  <div className="h-full bg-primary" style={{ width: s.progress + "%" }} />
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-1">{s.progress}% complete</div>
               </div>

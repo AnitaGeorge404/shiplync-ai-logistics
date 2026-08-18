@@ -36,7 +36,7 @@ export function HubDashboard() {
         <StatCard label="Ready to dispatch" value="188" delta="42 pending" icon={<Truck />} trend="flat" />
         <StatCard label="Dispatched" value="612" delta="+68" icon={<PackageCheck />} />
         <StatCard label="Exceptions" value="5" delta="1 critical" trend="down" icon={<AlertTriangle />} />
-        <StatCard label="Medical queue" value="3" hint="All priority-locked" icon={<HeartPulse />} accent="linear-gradient(90deg, oklch(0.62 0.24 15), oklch(0.78 0.16 75))" />
+        <StatCard label="Medical queue" value="3" hint="All priority-locked" icon={<HeartPulse />} />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -59,7 +59,7 @@ export function HubDashboard() {
           </div>
         </div>
 
-        <div className="card-elevated p-5 bg-gradient-to-br from-primary/8 to-accent/8">
+        <div className="card-elevated p-5 bg-muted/40">
           <div className="flex items-center gap-2 text-xs font-medium text-primary"><Sparkles className="h-3.5 w-3.5" /> AI dispatch assistant</div>
           <div className="mt-3 rounded-lg border bg-card p-3 text-sm">
             <div className="font-medium">"Deliver these 42 packages before 8 PM"</div>
@@ -123,7 +123,7 @@ export function HubDashboard() {
           {drivers.map((d) => (
             <div key={d.id} className="grid grid-cols-12 items-center gap-3 px-5 py-3">
               <div className="col-span-3 flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-accent grid place-items-center text-white text-xs font-semibold">{d.name.split(" ").map((w: string) => w[0]).join("")}</div>
+                <div className="h-9 w-9 rounded-full bg-primary text-primary-foreground grid place-items-center text-xs font-semibold">{d.name.split(" ").map((w: string) => w[0]).join("")}</div>
                 <div>
                   <div className="text-sm font-medium">{d.name}</div>
                   <div className="text-[11px] text-muted-foreground">{d.id}</div>
