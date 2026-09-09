@@ -26,8 +26,14 @@ import { Route as AdminReportsRouteImport } from './routes/admin.reports'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as CustomerIndexRouteImport } from './routes/customer.index'
+import { Route as CustomerAddressesRouteImport } from './routes/customer.addresses'
 import { Route as CustomerBookRouteImport } from './routes/customer.book'
+import { Route as CustomerInvoicesRouteImport } from './routes/customer.invoices'
+import { Route as CustomerNotificationsRouteImport } from './routes/customer.notifications'
+import { Route as CustomerPaymentsRouteImport } from './routes/customer.payments'
+import { Route as CustomerReturnsRouteImport } from './routes/customer.returns'
 import { Route as CustomerShipmentsRouteImport } from './routes/customer.shipments'
+import { Route as CustomerSupportRouteImport } from './routes/customer.support'
 import { Route as DriverIndexRouteImport } from './routes/driver.index'
 import { Route as DriverDeliveriesRouteImport } from './routes/driver.deliveries'
 import { Route as DriverEarningsRouteImport } from './routes/driver.earnings'
@@ -129,14 +135,44 @@ const CustomerIndexRoute = CustomerIndexRouteImport.update({
   path: '/',
   getParentRoute: () => CustomerRoute,
 } as any)
+const CustomerAddressesRoute = CustomerAddressesRouteImport.update({
+  id: '/addresses',
+  path: '/addresses',
+  getParentRoute: () => CustomerRoute,
+} as any)
 const CustomerBookRoute = CustomerBookRouteImport.update({
   id: '/book',
   path: '/book',
   getParentRoute: () => CustomerRoute,
 } as any)
+const CustomerInvoicesRoute = CustomerInvoicesRouteImport.update({
+  id: '/invoices',
+  path: '/invoices',
+  getParentRoute: () => CustomerRoute,
+} as any)
+const CustomerNotificationsRoute = CustomerNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => CustomerRoute,
+} as any)
+const CustomerPaymentsRoute = CustomerPaymentsRouteImport.update({
+  id: '/payments',
+  path: '/payments',
+  getParentRoute: () => CustomerRoute,
+} as any)
+const CustomerReturnsRoute = CustomerReturnsRouteImport.update({
+  id: '/returns',
+  path: '/returns',
+  getParentRoute: () => CustomerRoute,
+} as any)
 const CustomerShipmentsRoute = CustomerShipmentsRouteImport.update({
   id: '/shipments',
   path: '/shipments',
+  getParentRoute: () => CustomerRoute,
+} as any)
+const CustomerSupportRoute = CustomerSupportRouteImport.update({
+  id: '/support',
+  path: '/support',
   getParentRoute: () => CustomerRoute,
 } as any)
 const DriverIndexRoute = DriverIndexRouteImport.update({
@@ -231,8 +267,14 @@ export interface FileRoutesByFullPath {
   '/admin/reports': typeof AdminReportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/customer/addresses': typeof CustomerAddressesRoute
   '/customer/book': typeof CustomerBookRoute
+  '/customer/invoices': typeof CustomerInvoicesRoute
+  '/customer/notifications': typeof CustomerNotificationsRoute
+  '/customer/payments': typeof CustomerPaymentsRoute
+  '/customer/returns': typeof CustomerReturnsRoute
   '/customer/shipments': typeof CustomerShipmentsRoute
+  '/customer/support': typeof CustomerSupportRoute
   '/driver/deliveries': typeof DriverDeliveriesRoute
   '/driver/earnings': typeof DriverEarningsRoute
   '/driver/exceptions': typeof DriverExceptionsRoute
@@ -263,8 +305,14 @@ export interface FileRoutesByTo {
   '/admin/reports': typeof AdminReportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/customer/addresses': typeof CustomerAddressesRoute
   '/customer/book': typeof CustomerBookRoute
+  '/customer/invoices': typeof CustomerInvoicesRoute
+  '/customer/notifications': typeof CustomerNotificationsRoute
+  '/customer/payments': typeof CustomerPaymentsRoute
+  '/customer/returns': typeof CustomerReturnsRoute
   '/customer/shipments': typeof CustomerShipmentsRoute
+  '/customer/support': typeof CustomerSupportRoute
   '/driver/deliveries': typeof DriverDeliveriesRoute
   '/driver/earnings': typeof DriverEarningsRoute
   '/driver/exceptions': typeof DriverExceptionsRoute
@@ -300,8 +348,14 @@ export interface FileRoutesById {
   '/admin/reports': typeof AdminReportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/customer/addresses': typeof CustomerAddressesRoute
   '/customer/book': typeof CustomerBookRoute
+  '/customer/invoices': typeof CustomerInvoicesRoute
+  '/customer/notifications': typeof CustomerNotificationsRoute
+  '/customer/payments': typeof CustomerPaymentsRoute
+  '/customer/returns': typeof CustomerReturnsRoute
   '/customer/shipments': typeof CustomerShipmentsRoute
+  '/customer/support': typeof CustomerSupportRoute
   '/driver/deliveries': typeof DriverDeliveriesRoute
   '/driver/earnings': typeof DriverEarningsRoute
   '/driver/exceptions': typeof DriverExceptionsRoute
@@ -338,8 +392,14 @@ export interface FileRouteTypes {
     | '/admin/reports'
     | '/admin/settings'
     | '/admin/users'
+    | '/customer/addresses'
     | '/customer/book'
+    | '/customer/invoices'
+    | '/customer/notifications'
+    | '/customer/payments'
+    | '/customer/returns'
     | '/customer/shipments'
+    | '/customer/support'
     | '/driver/deliveries'
     | '/driver/earnings'
     | '/driver/exceptions'
@@ -370,8 +430,14 @@ export interface FileRouteTypes {
     | '/admin/reports'
     | '/admin/settings'
     | '/admin/users'
+    | '/customer/addresses'
     | '/customer/book'
+    | '/customer/invoices'
+    | '/customer/notifications'
+    | '/customer/payments'
+    | '/customer/returns'
     | '/customer/shipments'
+    | '/customer/support'
     | '/driver/deliveries'
     | '/driver/earnings'
     | '/driver/exceptions'
@@ -406,8 +472,14 @@ export interface FileRouteTypes {
     | '/admin/reports'
     | '/admin/settings'
     | '/admin/users'
+    | '/customer/addresses'
     | '/customer/book'
+    | '/customer/invoices'
+    | '/customer/notifications'
+    | '/customer/payments'
+    | '/customer/returns'
     | '/customer/shipments'
+    | '/customer/support'
     | '/driver/deliveries'
     | '/driver/earnings'
     | '/driver/exceptions'
@@ -557,6 +629,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CustomerIndexRouteImport
       parentRoute: typeof CustomerRoute
     }
+    '/customer/addresses': {
+      id: '/customer/addresses'
+      path: '/addresses'
+      fullPath: '/customer/addresses'
+      preLoaderRoute: typeof CustomerAddressesRouteImport
+      parentRoute: typeof CustomerRoute
+    }
     '/customer/book': {
       id: '/customer/book'
       path: '/book'
@@ -564,11 +643,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CustomerBookRouteImport
       parentRoute: typeof CustomerRoute
     }
+    '/customer/invoices': {
+      id: '/customer/invoices'
+      path: '/invoices'
+      fullPath: '/customer/invoices'
+      preLoaderRoute: typeof CustomerInvoicesRouteImport
+      parentRoute: typeof CustomerRoute
+    }
+    '/customer/notifications': {
+      id: '/customer/notifications'
+      path: '/notifications'
+      fullPath: '/customer/notifications'
+      preLoaderRoute: typeof CustomerNotificationsRouteImport
+      parentRoute: typeof CustomerRoute
+    }
+    '/customer/payments': {
+      id: '/customer/payments'
+      path: '/payments'
+      fullPath: '/customer/payments'
+      preLoaderRoute: typeof CustomerPaymentsRouteImport
+      parentRoute: typeof CustomerRoute
+    }
+    '/customer/returns': {
+      id: '/customer/returns'
+      path: '/returns'
+      fullPath: '/customer/returns'
+      preLoaderRoute: typeof CustomerReturnsRouteImport
+      parentRoute: typeof CustomerRoute
+    }
     '/customer/shipments': {
       id: '/customer/shipments'
       path: '/shipments'
       fullPath: '/customer/shipments'
       preLoaderRoute: typeof CustomerShipmentsRouteImport
+      parentRoute: typeof CustomerRoute
+    }
+    '/customer/support': {
+      id: '/customer/support'
+      path: '/support'
+      fullPath: '/customer/support'
+      preLoaderRoute: typeof CustomerSupportRouteImport
       parentRoute: typeof CustomerRoute
     }
     '/driver/': {
@@ -708,16 +822,28 @@ const AdminRouteChildren: AdminRouteChildren = {
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface CustomerRouteChildren {
+  CustomerAddressesRoute: typeof CustomerAddressesRoute
   CustomerBookRoute: typeof CustomerBookRoute
+  CustomerInvoicesRoute: typeof CustomerInvoicesRoute
+  CustomerNotificationsRoute: typeof CustomerNotificationsRoute
+  CustomerPaymentsRoute: typeof CustomerPaymentsRoute
+  CustomerReturnsRoute: typeof CustomerReturnsRoute
   CustomerShipmentsRoute: typeof CustomerShipmentsRoute
+  CustomerSupportRoute: typeof CustomerSupportRoute
   CustomerIndexRoute: typeof CustomerIndexRoute
   CustomerTrackIdRoute: typeof CustomerTrackIdRoute
   CustomerTrackIndexRoute: typeof CustomerTrackIndexRoute
 }
 
 const CustomerRouteChildren: CustomerRouteChildren = {
+  CustomerAddressesRoute: CustomerAddressesRoute,
   CustomerBookRoute: CustomerBookRoute,
+  CustomerInvoicesRoute: CustomerInvoicesRoute,
+  CustomerNotificationsRoute: CustomerNotificationsRoute,
+  CustomerPaymentsRoute: CustomerPaymentsRoute,
+  CustomerReturnsRoute: CustomerReturnsRoute,
   CustomerShipmentsRoute: CustomerShipmentsRoute,
+  CustomerSupportRoute: CustomerSupportRoute,
   CustomerIndexRoute: CustomerIndexRoute,
   CustomerTrackIdRoute: CustomerTrackIdRoute,
   CustomerTrackIndexRoute: CustomerTrackIndexRoute,

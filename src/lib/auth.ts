@@ -23,10 +23,20 @@ export const auth = betterAuth({
     "http://localhost:5173",
     // Vercel injects VERCEL_URL (host only, no scheme) for every
     // deployment — production and preview alike — so this covers each
-    // preview URL automatically without hardcoding hashes that change
-    // on every deploy.
+    // preview/unique-deployment URL automatically without hardcoding
+    // hashes that change on every deploy. VERCEL_PROJECT_PRODUCTION_URL
+    // is the assigned "clean" production alias, which VERCEL_URL does
+    // NOT always equal (this is what actually broke login in prod —
+    // requests came from shiplync-ai-logistics.vercel.app, which wasn't
+    // covered by either the hash URL or the git-main branch alias below).
     ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
-    // Stable production domains (add custom domains here too if you attach one).
+    ...(process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? [`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`]
+      : []),
+    // Stable, hardcoded fallbacks (kept even if the env vars above are
+    // ever unset, and to cover custom domains you attach later — add
+    // those here too).
+    "https://shiplync-ai-logistics.vercel.app",
     "https://shiplync-ai-logistics-git-main-anita-georges-projects.vercel.app",
   ],
   emailAndPassword: {
