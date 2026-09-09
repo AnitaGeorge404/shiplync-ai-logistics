@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { shipments } from "@/lib/mock-data";
 import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,33 @@ export const Route = createFileRoute("/customer/shipments")({
   component: History,
 });
 
+type RealShipment = {
+  id: string;
+  trackingId: string;
+  senderCity: string;
+  receiverCity: string;
+  weightKg: number;
+  packageType: string;
+  createdAt: string;
+  estimatedDeliveryAt: string | null;
+  cost: number;
+  status: string;
+};
+
+function useRealShipments() {
+  return useQuery({
+    queryKey: ["shipments", "mine"],
+    queryFn: async (): Promise<RealShipment[]> => {
+      const res = await fetch("/api/shipments");
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.shipments ?? [];
+    },
+  });
+}
+
 function History() {
+  const { data: realShipments = [] } = useRealShipments();
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
@@ -45,6 +72,33 @@ function History() {
             </tr>
           </thead>
           <tbody className="divide-y">
+            {realShipments.map((s) => (
+              <tr key={s.id} className="hover:bg-primary/5 transition-colors">
+                <td className="px-5 py-4">
+                  <Link
+                    to="/customer/track/$id"
+                    params={{ id: s.trackingId }}
+                    className="font-mono text-xs text-primary hover:underline"
+                  >
+                    {s.trackingId}
+                  </Link>
+                  <span className="ml-2 text-[10px] uppercase tracking-wide text-success">live</span>
+                </td>
+                <td className="px-5 py-4">
+                  <div className="font-medium">{s.senderCity} → {s.receiverCity}</div>
+                  <div className="text-xs text-muted-foreground">{s.weightKg} kg</div>
+                </td>
+                <td className="px-5 py-4 text-xs capitalize">{s.packageType}</td>
+                <td className="px-5 py-4 text-xs text-muted-foreground">
+                  {new Date(s.createdAt).toLocaleDateString()}
+                </td>
+                <td className="px-5 py-4 text-xs">
+                  {s.estimatedDeliveryAt ? new Date(s.estimatedDeliveryAt).toLocaleString() : "—"}
+                </td>
+                <td className="px-5 py-4 text-right font-medium">₹{s.cost}</td>
+                <td className="px-5 py-4 text-right text-xs capitalize">{s.status.replace(/_/g, " ")}</td>
+              </tr>
+            ))}
             {shipments.map((s) => (
               <tr key={s.id} className="hover:bg-muted/30 transition-colors">
                 <td className="px-5 py-4">

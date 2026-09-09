@@ -32,11 +32,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   subtitle = "Access instant shipment booking, live GPS tracking, and automated AI dispatch.",
   compact = false,
 }) => {
-  const { login } = useAuth();
+  const { login, loginWithEmail, registerWithEmail } = useAuth();
   const [activeTab, setActiveTab] = useState<"phone" | "email">("phone");
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Phone OTP state
   const [phone, setPhone] = useState("9876543210");
@@ -45,9 +46,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   const [resendTimer, setResendTimer] = useState(30);
 
   // Email state
-  const [email, setEmail] = useState("aditi.kapoor@example.com");
-  const [password, setPassword] = useState("••••••••••••");
-  const [name, setName] = useState("Aditi Kapoor");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
 
   const handleSendOtp = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,17 +71,20 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     }, 700);
   };
 
-  const handleEmailSubmit = (e: React.FormEvent) => {
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError(null);
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      login({
-        email,
-        name: mode === "signup" ? name : email.split("@")[0].replace(".", " "),
-      });
-      if (onSuccess) onSuccess();
-    }, 700);
+    const result =
+      mode === "signup"
+        ? await registerWithEmail(name, email, password)
+        : await loginWithEmail(email, password);
+    setIsLoading(false);
+    if (result.error) {
+      setAuthError(result.error);
+      return;
+    }
+    if (onSuccess) onSuccess();
   };
 
   const handleSocialLogin = (provider: string) => {
@@ -321,6 +325,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({
                 <Label htmlFor="remember" className="text-xs text-muted-foreground cursor-pointer">
                   Remember this device for 30 days
                 </Label>
+              </div>
+            )}
+
+            {authError && (
+              <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-2.5 text-xs text-destructive">
+                {authError}
               </div>
             )}
 

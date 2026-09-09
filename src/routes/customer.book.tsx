@@ -27,9 +27,71 @@ function BookShipment() {
   const [pkg, setPkg] = useState<"standard" | "express" | "medical" | "fragile">("express");
   const [insurance, setInsurance] = useState(true);
   const [weight, setWeight] = useState(2.4);
+  const [receiverName, setReceiverName] = useState("");
+  const [receiverPhone, setReceiverPhone] = useState("");
+  const [receiverAddress, setReceiverAddress] = useState("402, Prestige Skyline, Bengaluru 560095");
+  const [senderAddress, setSenderAddress] = useState("88 Marine Drive, Mumbai 400002");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [booked, setBooked] = useState<{ trackingId: string; cost: number; id: string } | null>(
+    null,
+  );
+
   const base = pkg === "express" ? 220 : pkg === "medical" ? 480 : pkg === "fragile" ? 180 : 120;
   const cost = Math.round(base + weight * 60 + (insurance ? 45 : 0));
-  const tracking = "SLX-" + Math.floor(70000 + Math.random() * 9000) + "-IN";
+  const tracking = booked?.trackingId ?? "SLX-" + Math.floor(70000 + Math.random() * 9000) + "-IN";
+
+  const apiPackageType = pkg; // "standard" | "express" | "medical" | "fragile" match the API enum
+
+  async function confirmAndPay() {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const [senderLine, senderCity = "Mumbai", senderPin = "400002"] = splitAddress(senderAddress);
+      const [receiverLine, receiverCity = "Bengaluru", receiverPin = "560095"] =
+        splitAddress(receiverAddress);
+
+      const res = await fetch("/api/shipments", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          senderName: user?.name || "Sender",
+          senderPhone: user?.phone || "+91 90000 00000",
+          senderAddressLine: senderLine,
+          senderCity,
+          senderState: "NA",
+          senderPincode: senderPin,
+          receiverName: receiverName || "Recipient",
+          receiverPhone: receiverPhone || "+91 90000 00001",
+          receiverAddressLine: receiverLine,
+          receiverCity,
+          receiverState: "NA",
+          receiverPincode: receiverPin,
+          weightKg: weight,
+          packageType: apiPackageType,
+          priority: pkg === "medical" ? "high" : "normal",
+          insured: insurance,
+          declaredValue: insurance ? 50000 : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSubmitError(data.error || "Could not create shipment.");
+        setSubmitting(false);
+        return;
+      }
+      setBooked({
+        trackingId: data.shipment.trackingId,
+        cost: data.shipment.cost,
+        id: data.shipment.id,
+      });
+      setStep(3);
+    } catch {
+      setSubmitError("Network error — is the server running?");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   if (!isAuthenticated) {
     return (
@@ -80,15 +142,15 @@ function BookShipment() {
                 <div className="grid sm:grid-cols-2 gap-3 mt-3">
                   <div><Label>Full name</Label><Input defaultValue={user?.name || "Aditi Kapoor"} /></div>
                   <div><Label>Phone</Label><Input defaultValue={user?.phone || "+91 98765 43210"} /></div>
-                  <div className="sm:col-span-2"><Label>Address</Label><Input defaultValue="88 Marine Drive, Mumbai 400002" /></div>
+                  <div className="sm:col-span-2"><Label>Address</Label><Input value={senderAddress} onChange={(e) => setSenderAddress(e.target.value)} /></div>
                 </div>
               </div>
               <div>
                 <div className="flex items-center gap-2 text-sm font-medium"><MapPin className="h-4 w-4 text-primary" /> Delivery address</div>
                 <div className="grid sm:grid-cols-2 gap-3 mt-3">
-                  <div><Label>Full name</Label><Input placeholder="Recipient name" /></div>
-                  <div><Label>Phone</Label><Input placeholder="Recipient phone" /></div>
-                  <div className="sm:col-span-2"><Label>Address</Label><Input placeholder="Street, city, PIN" defaultValue="402, Prestige Skyline, Bengaluru 560095" /></div>
+                  <div><Label>Full name</Label><Input placeholder="Recipient name" value={receiverName} onChange={(e) => setReceiverName(e.target.value)} /></div>
+                  <div><Label>Phone</Label><Input placeholder="Recipient phone" value={receiverPhone} onChange={(e) => setReceiverPhone(e.target.value)} /></div>
+                  <div className="sm:col-span-2"><Label>Address</Label><Input placeholder="Street, city, PIN" value={receiverAddress} onChange={(e) => setReceiverAddress(e.target.value)} /></div>
                 </div>
               </div>
             </div>
@@ -165,7 +227,7 @@ function BookShipment() {
                 </div>
               </div>
               <div className="flex gap-3">
-                <Link to="/customer/track/$id" params={{ id: "SL-8842013" }}>
+                <Link to="/customer/track/$id" params={{ id: tracking }}>
                   <Button className="gap-1.5">Track live <ArrowRight className="h-4 w-4" /></Button>
                 </Link>
                 <Link to="/customer"><Button variant="outline">Back to dashboard</Button></Link>
@@ -173,11 +235,22 @@ function BookShipment() {
             </div>
           )}
 
+          {submitError && (
+            <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-3 text-xs text-destructive">
+              {submitError}
+            </div>
+          )}
+
           {step < 3 && (
             <div className="flex justify-between pt-2 border-t">
               <Button variant="ghost" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}>Back</Button>
-              <Button onClick={() => setStep(step + 1)} className="gap-1.5">
-                {step === 2 ? "Confirm & pay" : "Continue"} <ArrowRight className="h-4 w-4" />
+              <Button
+                onClick={() => (step === 2 ? confirmAndPay() : setStep(step + 1))}
+                disabled={submitting}
+                className="gap-1.5"
+              >
+                {step === 2 ? (submitting ? "Booking..." : "Confirm & pay") : "Continue"}{" "}
+                <ArrowRight className="h-4 w-4" />
               </Button>
             </div>
           )}
@@ -215,6 +288,18 @@ function BookShipment() {
       </div>
     </div>
   );
+}
+
+// Naive "line, city pincode" splitter for the free-text address field —
+// good enough to populate the structured API payload from this demo UI.
+function splitAddress(raw: string): [string, string?, string?] {
+  const parts = raw.split(",").map((p) => p.trim());
+  const last = parts[parts.length - 1] ?? "";
+  const pinMatch = last.match(/(\d{4,6})$/);
+  const pin = pinMatch?.[1];
+  const city = pin ? last.replace(pin, "").trim() : last;
+  const line = parts.slice(0, -1).join(", ") || raw;
+  return [line, city || undefined, pin || undefined];
 }
 
 function Line({ l, v, pos, muted }: { l: string; v: string; pos?: boolean; muted?: boolean }) {
