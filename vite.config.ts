@@ -12,9 +12,11 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
-  // Deploying to Render (plain Node), not Cloudflare Workers — force the
-  // node-server preset so we can use a normal TCP Postgres driver against Supabase.
+  // Deploying to Vercel — Vercel's Node.js serverless functions (unlike
+  // Cloudflare Workers) support a normal TCP Postgres driver against Supabase,
+  // so we just need Nitro's vercel preset for the correct output format
+  // (Vercel's Build Output API), not a bare node-server build.
   nitro: {
-    preset: "node-server",
+    preset: "vercel",
   },
 });

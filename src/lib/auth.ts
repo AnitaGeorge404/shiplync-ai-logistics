@@ -21,6 +21,13 @@ export const auth = betterAuth({
     "http://localhost:8081",
     "http://localhost:8082",
     "http://localhost:5173",
+    // Vercel injects VERCEL_URL (host only, no scheme) for every
+    // deployment — production and preview alike — so this covers each
+    // preview URL automatically without hardcoding hashes that change
+    // on every deploy.
+    ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
+    // Stable production domains (add custom domains here too if you attach one).
+    "https://shiplync-ai-logistics-git-main-anita-georges-projects.vercel.app",
   ],
   emailAndPassword: {
     enabled: true,
