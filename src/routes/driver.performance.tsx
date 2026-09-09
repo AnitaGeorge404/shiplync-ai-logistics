@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { drivers } from "@/lib/mock-data";
+import { useAuth } from "@/context/AuthContext";
+import { useShipments } from "@/lib/api-hooks";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -25,7 +26,15 @@ export const Route = createFileRoute("/driver/performance")({
 });
 
 function DriverPerformancePage() {
-  const driver = drivers[0] || { name: "Ravi Kumar", id: "DRV-102", rating: 4.9, vehicle: "EV Bike" };
+  const { user } = useAuth();
+  const { data: assigned = [] } = useShipments("assigned");
+  const delivered = assigned.filter((s: any) => s.status === "delivered" && s.deliveredAt);
+  const onTime = delivered.filter(
+    (s: any) => s.estimatedDeliveryAt && new Date(s.deliveredAt) <= new Date(s.estimatedDeliveryAt),
+  );
+  const onTimePct = delivered.length > 0 ? Math.round((onTime.length / delivered.length) * 100) : 100;
+  const medicalDelivered = delivered.filter((s: any) => s.packageType === "medical");
+  const driver = { name: user?.name ?? "Delivery Partner", id: user?.id?.slice(0, 8) ?? "—", vehicle: "EV Bike" };
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -80,16 +89,16 @@ function DriverPerformancePage() {
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
             On-Time Delivery SLA <CheckCircle2 className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">98.6%</div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-1">Top 5% of fleet</div>
+          <div className="text-2xl font-semibold font-display mt-2">{onTimePct}%</div>
+          <div className="text-[11px] text-muted-foreground font-medium mt-1">{delivered.length} deliveries, real data</div>
         </div>
 
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Customer Satisfaction <Smile className="h-4 w-4 text-foreground" />
+            Total Delivered <Smile className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">99.1%</div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-1">Positive Feedback</div>
+          <div className="text-2xl font-semibold font-display mt-2">{delivered.length}</div>
+          <div className="text-[11px] text-muted-foreground font-medium mt-1">of {assigned.length} assigned</div>
         </div>
 
         <div className="border rounded-lg p-4 bg-card">
@@ -97,15 +106,15 @@ function DriverPerformancePage() {
             EV Efficiency <Zap className="h-4 w-4 text-foreground" />
           </div>
           <div className="text-2xl font-semibold font-display mt-2">14.2 km/kWh</div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-1">Optimal Battery Use</div>
+          <div className="text-[11px] text-muted-foreground font-medium mt-1">Illustrative — no telemetry yet</div>
         </div>
 
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Medical Priority Compliance <ShieldCheck className="h-4 w-4 text-foreground" />
+            Medical Deliveries <ShieldCheck className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">100%</div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-1">Zero Temp Breaches</div>
+          <div className="text-2xl font-semibold font-display mt-2">{medicalDelivered.length}</div>
+          <div className="text-[11px] text-muted-foreground font-medium mt-1">real data</div>
         </div>
       </div>
 
@@ -114,28 +123,8 @@ function DriverPerformancePage() {
         <h2 className="font-display text-base font-semibold text-foreground">
           Recent Customer Feedback
         </h2>
-
-        <div className="space-y-3">
-          {[
-            { name: "Aditi K.", text: "Super polite delivery partner! Reached 15 minutes before estimated time and verified OTP quickly.", date: "Today, 11:22 AM" },
-            { name: "Sunita R.", text: "Careful handling of cold-chain vaccine box. Very professional service.", date: "Yesterday, 4:10 PM" },
-            { name: "Kabir M.", text: "Great communication via WhatsApp before arriving.", date: "Aug 16, 2026" },
-          ].map((rev, idx) => (
-            <div key={idx} className="border rounded-lg p-4 bg-card space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="font-medium text-xs text-foreground flex items-center gap-1.5">
-                  <span>{rev.name}</span>
-                  <div className="flex text-amber-400">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />
-                    ))}
-                  </div>
-                </div>
-                <span className="text-[10px] text-muted-foreground">{rev.date}</span>
-              </div>
-              <p className="text-xs text-muted-foreground">{rev.text}</p>
-            </div>
-          ))}
+        <div className="border rounded-lg p-4 bg-card text-xs text-muted-foreground">
+          No review/rating system is implemented yet — this section is illustrative only.
         </div>
       </div>
     </div>

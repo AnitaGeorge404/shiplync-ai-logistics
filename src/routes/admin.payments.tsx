@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
+import { usePayments } from "@/lib/api-hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -45,58 +46,31 @@ export const Route = createFileRoute("/admin/payments")({
   component: AdminPaymentsPage,
 });
 
-export interface PaymentItem {
-  id: string;
-  customer: string;
-  email: string;
-  amount: number;
-  method: "UPI" | "Credit Card" | "Debit Card" | "Cash on Pickup" | "Corporate Credit";
-  status: "Completed" | "Pending" | "Refunded" | "Failed";
-  date: string;
-  tracking: string;
-}
-
-const INITIAL_PAYMENTS: PaymentItem[] = [
-  { id: "TXN-984210", customer: "Aditi Kapoor", email: "aditi.k@example.com", amount: 480, method: "UPI", status: "Completed", date: "Aug 18, 11:14 AM", tracking: "SLX-77420-IN" },
-  { id: "TXN-984211", customer: "TechCorp Logistics", email: "billing@techcorp.in", amount: 12400, method: "Corporate Credit", status: "Completed", date: "Aug 18, 10:45 AM", tracking: "SLX-77421-IN" },
-  { id: "TXN-984212", customer: "Kabir Mehta", email: "kabir.m@gmail.com", amount: 340, method: "Credit Card", status: "Pending", date: "Aug 18, 10:12 AM", tracking: "SLX-77422-IN" },
-  { id: "TXN-984213", customer: "Sunita Rao", email: "sunita.r@gmail.com", amount: 780, method: "UPI", status: "Completed", date: "Aug 18, 09:30 AM", tracking: "SLX-77423-IN" },
-  { id: "TXN-984214", customer: "Vikram S.", email: "vikram.s@logistics.com", amount: 560, method: "Cash on Pickup", status: "Completed", date: "Aug 17, 08:20 PM", tracking: "SLX-77424-IN" },
-  { id: "TXN-984215", customer: "Deepa Patel", email: "deepa.p@logistics.com", amount: 220, method: "Debit Card", status: "Refunded", date: "Aug 17, 05:10 PM", tracking: "SLX-77425-IN" },
-];
-
 function AdminPaymentsPage() {
-  const [paymentsList, setPaymentsList] = useState<PaymentItem[]>(INITIAL_PAYMENTS);
+  const { data: paymentsList = [] } = usePayments("all");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
   const filteredPayments = useMemo(() => {
-    return paymentsList.filter((p) => {
+    return paymentsList.filter((p: any) => {
       const matchesSearch =
-        p.id.toLowerCase().includes(search.toLowerCase()) ||
-        p.customer.toLowerCase().includes(search.toLowerCase()) ||
-        p.email.toLowerCase().includes(search.toLowerCase()) ||
-        p.tracking.toLowerCase().includes(search.toLowerCase());
-
+        p.trackingId.toLowerCase().includes(search.toLowerCase()) ||
+        (p.transactionRef ?? "").toLowerCase().includes(search.toLowerCase());
       const matchesStatus = statusFilter === "ALL" || p.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [paymentsList, search, statusFilter]);
 
   const stats = useMemo(() => {
-    const totalVolume = paymentsList.reduce((acc, p) => (p.status === "Completed" ? acc + p.amount : acc), 0);
+    const totalVolume = paymentsList.reduce((acc: number, p: any) => (p.status === "paid" ? acc + p.amount : acc), 0);
     const count = paymentsList.length;
-    const completedCount = paymentsList.filter((p) => p.status === "Completed").length;
-    const refundedCount = paymentsList.filter((p) => p.status === "Refunded").length;
-
+    const completedCount = paymentsList.filter((p: any) => p.status === "paid").length;
+    const refundedCount = paymentsList.filter((p: any) => p.status === "refunded").length;
     return { totalVolume, count, completedCount, refundedCount };
   }, [paymentsList]);
 
-  const handleRefund = (id: string, customer: string, amount: number) => {
-    setPaymentsList((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status: "Refunded" } : p))
-    );
-    toast.success(`Refund of ₹${amount} issued to ${customer}`);
+  const handleRefund = () => {
+    toast.info("Refund processing isn't wired up to a payment gateway yet — no gateway account is connected.");
   };
 
   return (
@@ -174,10 +148,10 @@ function AdminPaymentsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Statuses</SelectItem>
-            <SelectItem value="Completed">Completed</SelectItem>
-            <SelectItem value="Pending">Pending</SelectItem>
-            <SelectItem value="Refunded">Refunded</SelectItem>
-            <SelectItem value="Failed">Failed</SelectItem>
+            <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="refunded">Refunded</SelectItem>
+            <SelectItem value="failed">Failed</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -187,10 +161,10 @@ function AdminPaymentsPage() {
         <Table>
           <TableHeader className="bg-muted/40">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="text-xs font-medium">Transaction ID</TableHead>
-              <TableHead className="text-xs font-medium">Customer & Email</TableHead>
+              <TableHead className="text-xs font-medium">Transaction Ref</TableHead>
+              <TableHead className="text-xs font-medium">Route</TableHead>
               <TableHead className="text-xs font-medium">Method</TableHead>
-              <TableHead className="text-xs font-medium">Tracking Link</TableHead>
+              <TableHead className="text-xs font-medium">Tracking ID</TableHead>
               <TableHead className="text-xs font-medium">Amount</TableHead>
               <TableHead className="text-xs font-medium">Status</TableHead>
               <TableHead className="text-xs font-medium">Date</TableHead>
@@ -198,25 +172,31 @@ function AdminPaymentsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredPayments.map((p) => (
+            {filteredPayments.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center text-xs text-muted-foreground py-8">
+                  No payments recorded yet.
+                </TableCell>
+              </TableRow>
+            )}
+            {filteredPayments.map((p: any) => (
               <TableRow key={p.id} className="text-xs hover:bg-muted/30">
                 <TableCell className="py-3 font-mono font-semibold text-foreground text-xs">
-                  {p.id}
+                  {p.transactionRef}
                 </TableCell>
 
                 <TableCell>
-                  <div className="font-medium text-foreground">{p.customer}</div>
-                  <div className="text-[11px] text-muted-foreground truncate max-w-[160px]">{p.email}</div>
+                  <div className="font-medium text-foreground">{p.senderCity} → {p.receiverCity}</div>
                 </TableCell>
 
                 <TableCell>
-                  <Badge variant="outline" className="font-normal text-[11px] border-border bg-muted/20">
+                  <Badge variant="outline" className="font-normal text-[11px] border-border bg-muted/20 capitalize">
                     {p.method}
                   </Badge>
                 </TableCell>
 
                 <TableCell className="font-mono text-xs text-muted-foreground">
-                  {p.tracking}
+                  {p.trackingId}
                 </TableCell>
 
                 <TableCell className="font-semibold text-foreground text-xs">
@@ -227,21 +207,21 @@ function AdminPaymentsPage() {
                   <div className="flex items-center gap-1.5">
                     <span
                       className={`h-2 w-2 rounded-full ${
-                        p.status === "Completed"
+                        p.status === "paid"
                           ? "bg-emerald-500"
-                          : p.status === "Pending"
+                          : p.status === "pending"
                           ? "bg-amber-500"
-                          : p.status === "Refunded"
+                          : p.status === "refunded"
                           ? "bg-blue-500"
                           : "bg-red-500"
                       }`}
                     />
-                    <span className="font-medium text-xs">{p.status}</span>
+                    <span className="font-medium text-xs capitalize">{p.status}</span>
                   </div>
                 </TableCell>
 
                 <TableCell className="text-xs text-muted-foreground">
-                  {p.date}
+                  {new Date(p.createdAt).toLocaleString()}
                 </TableCell>
 
                 <TableCell className="text-right">
@@ -253,14 +233,11 @@ function AdminPaymentsPage() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-44 text-xs">
                       <DropdownMenuLabel className="text-[11px] text-muted-foreground">
-                        {p.id}
+                        {p.transactionRef}
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => toast.info(`Viewing receipt for ${p.id}`)} className="gap-2 text-xs">
-                        <Receipt className="h-3.5 w-3.5" /> Download Receipt
-                      </DropdownMenuItem>
-                      {p.status === "Completed" && (
-                        <DropdownMenuItem onClick={() => handleRefund(p.id, p.customer, p.amount)} className="gap-2 text-xs text-amber-600">
+                      {p.status === "paid" && (
+                        <DropdownMenuItem onClick={handleRefund} className="gap-2 text-xs text-amber-600">
                           <RotateCcw className="h-3.5 w-3.5" /> Issue Refund
                         </DropdownMenuItem>
                       )}

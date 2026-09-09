@@ -21,6 +21,12 @@ import {
   Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useShipments } from "@/lib/api-hooks";
+
+// No payroll/earnings table exists yet — earnings are derived from real
+// delivered shipments at a flat per-drop rate. Documented simplification,
+// see PROGRESS_REPORT.md; wallet withdrawal is still a UI-only demo action.
+const PER_DROP_RATE = 80;
 
 export const Route = createFileRoute("/driver/earnings")({
   head: () => ({
@@ -42,17 +48,36 @@ export interface EarningEntry {
   status: "Settled" | "Pending";
 }
 
-const INITIAL_EARNINGS: EarningEntry[] = [
-  { date: "Today (Aug 18)", dropsCount: 18, basePay: 1440, surgeBonus: 300, incentives: 100, total: 1840, status: "Pending" },
-  { date: "Aug 17, 2026", dropsCount: 24, basePay: 1920, surgeBonus: 400, incentives: 150, total: 2470, status: "Settled" },
-  { date: "Aug 16, 2026", dropsCount: 20, basePay: 1600, surgeBonus: 250, incentives: 100, total: 1950, status: "Settled" },
-  { date: "Aug 15, 2026", dropsCount: 22, basePay: 1760, surgeBonus: 350, incentives: 200, total: 2310, status: "Settled" },
-  { date: "Aug 14, 2026", dropsCount: 19, basePay: 1520, surgeBonus: 200, incentives: 100, total: 1820, status: "Settled" },
-];
+function useEarnings() {
+  const { data: assigned = [] } = useShipments("assigned");
+  const delivered = assigned.filter((s: any) => s.status === "delivered" && s.deliveredAt);
+
+  const byDate = new Map<string, number>();
+  for (const s of delivered) {
+    const key = new Date(s.deliveredAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+    byDate.set(key, (byDate.get(key) ?? 0) + 1);
+  }
+
+  const earnings: EarningEntry[] = Array.from(byDate.entries()).map(([date, dropsCount]) => ({
+    date,
+    dropsCount,
+    basePay: dropsCount * PER_DROP_RATE,
+    surgeBonus: 0,
+    incentives: 0,
+    total: dropsCount * PER_DROP_RATE,
+    status: "Settled" as const,
+  }));
+
+  const todayKey = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  const todayEarnings = byDate.get(todayKey) ? byDate.get(todayKey)! * PER_DROP_RATE : 0;
+  const total = delivered.length * PER_DROP_RATE;
+
+  return { earnings, todayEarnings, total, deliveredCount: delivered.length };
+}
 
 function DriverEarningsPage() {
-  const [earnings] = useState<EarningEntry[]>(INITIAL_EARNINGS);
-  const [walletBalance, setWalletBalance] = useState(3240);
+  const { earnings, todayEarnings, total } = useEarnings();
+  const [walletBalance, setWalletBalance] = useState(total);
 
   const handleCashout = () => {
     if (walletBalance <= 0) return;
@@ -113,25 +138,25 @@ function DriverEarningsPage() {
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
             Today's Earnings <IndianRupee className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">₹1,840</div>
+          <div className="text-2xl font-semibold font-display mt-2">₹{todayEarnings.toLocaleString()}</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            This Week <Calendar className="h-4 w-4 text-foreground" />
+            All-time Total <Calendar className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">₹11,420</div>
+          <div className="text-2xl font-semibold font-display mt-2">₹{total.toLocaleString()}</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
             Peak Surge Bonus <Sparkles className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">₹1,500</div>
+          <div className="text-2xl font-semibold font-display mt-2">₹0</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Monthly Total <TrendingUp className="h-4 w-4 text-foreground" />
+            Per-drop Rate <TrendingUp className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">₹46,200</div>
+          <div className="text-2xl font-semibold font-display mt-2">₹{PER_DROP_RATE}</div>
         </div>
       </div>
 
@@ -155,6 +180,13 @@ function DriverEarningsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {earnings.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-8">
+                    No deliveries completed yet.
+                  </TableCell>
+                </TableRow>
+              )}
               {earnings.map((e, i) => (
                 <TableRow key={i} className="text-xs hover:bg-muted/30">
                   <TableCell className="py-3 font-medium text-foreground text-xs">
