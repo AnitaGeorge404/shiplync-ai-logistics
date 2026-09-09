@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -22,8 +23,158 @@ import {
   IndianRupee,
   ShieldCheck,
   MoreHorizontal,
+  Truck,
 } from "lucide-react";
 import { toast } from "sonner";
+
+type RealAssignedShipment = {
+  id: string;
+  trackingId: string;
+  receiverName: string;
+  receiverAddressLine: string;
+  receiverCity: string;
+  status: string;
+};
+
+function useAssignedShipments() {
+  return useQuery({
+    queryKey: ["shipments", "assigned"],
+    queryFn: async (): Promise<RealAssignedShipment[]> => {
+      const res = await fetch("/api/shipments?scope=assigned");
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.shipments ?? [];
+    },
+    refetchInterval: 5000,
+  });
+}
+
+const NEXT_STATUS: Record<string, { label: string; status: string } | null> = {
+  booked: { label: "Mark picked up", status: "picked_up" },
+  payment_completed: { label: "Mark picked up", status: "picked_up" },
+  picked_up: { label: "Mark out for delivery", status: "out_for_delivery" },
+  arrived_hub: { label: "Mark out for delivery", status: "out_for_delivery" },
+  in_transit: { label: "Mark out for delivery", status: "out_for_delivery" },
+  out_for_delivery: null, // resolved via delivery attempt below
+  delivery_attempted: null,
+  delivered: null,
+  returned: null,
+  cancelled: null,
+};
+
+function LiveAssignmentsPanel() {
+  const { data: shipments = [], isLoading } = useAssignedShipments();
+  const queryClient = useQueryClient();
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function advanceStatus(id: string, status: string) {
+    setBusyId(id);
+    try {
+      const res = await fetch(`/api/shipments/${id}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status, note: `Updated by delivery agent to ${status}.` }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Could not update status");
+        return;
+      }
+      toast.success(`Status updated to "${status.replace(/_/g, " ")}"`);
+      queryClient.invalidateQueries({ queryKey: ["shipments", "assigned"] });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function recordAttempt(id: string, outcome: "delivered" | "receiver_unavailable") {
+    setBusyId(id);
+    try {
+      const res = await fetch(`/api/shipments/${id}/attempts`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          outcome,
+          reason: outcome === "delivered" ? "Delivered to recipient." : "Recipient not available.",
+          otpVerified: outcome === "delivered",
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Could not record delivery attempt");
+        return;
+      }
+      toast.success(outcome === "delivered" ? "Marked as delivered" : "Failed attempt logged");
+      queryClient.invalidateQueries({ queryKey: ["shipments", "assigned"] });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (isLoading || shipments.length === 0) return null;
+
+  return (
+    <div className="border rounded-lg bg-card p-4 space-y-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <Truck className="h-4 w-4" /> Live assignments (real, from database)
+      </div>
+      <div className="space-y-2">
+        {shipments.map((s) => {
+          const next = NEXT_STATUS[s.status];
+          return (
+            <div
+              key={s.id}
+              className="flex items-center justify-between gap-3 border rounded-md p-3 text-xs bg-muted/20"
+            >
+              <div>
+                <div className="font-mono font-semibold">{s.trackingId}</div>
+                <div className="text-muted-foreground">
+                  {s.receiverName} · {s.receiverCity}
+                </div>
+                <Badge variant="outline" className="mt-1 text-[10px] capitalize">
+                  {s.status.replace(/_/g, " ")}
+                </Badge>
+              </div>
+              <div className="flex gap-2">
+                {next && (
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={busyId === s.id}
+                    onClick={() => advanceStatus(s.id, next.status)}
+                  >
+                    {next.label}
+                  </Button>
+                )}
+                {s.status === "out_for_delivery" && (
+                  <>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={busyId === s.id}
+                      onClick={() => recordAttempt(s.id, "delivered")}
+                    >
+                      Delivered
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={busyId === s.id}
+                      onClick={() => recordAttempt(s.id, "receiver_unavailable")}
+                    >
+                      Failed attempt
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export const Route = createFileRoute("/driver/deliveries")({
   head: () => ({
@@ -105,6 +256,8 @@ function DriverDeliveriesPage() {
           <Download className="h-3.5 w-3.5" /> Export Log
         </Button>
       </div>
+
+      <LiveAssignmentsPanel />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

@@ -198,6 +198,17 @@ function AdminReportsPage() {
 
           <Button
             size="sm"
+            variant="outline"
+            className="h-9 text-xs gap-1.5"
+            onClick={() => {
+              window.location.href = "/api/reports/shipments.csv";
+            }}
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" /> Export real shipments (CSV)
+          </Button>
+
+          <Button
+            size="sm"
             className="h-9 text-xs gap-1.5"
             onClick={() => setIsGenerateOpen(true)}
           >

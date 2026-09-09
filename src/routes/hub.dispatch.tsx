@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { drivers } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +55,125 @@ export const Route = createFileRoute("/hub/dispatch")({
   }),
   component: HubDispatchPage,
 });
+
+type RealAgent = { id: string; name: string; phone: string | null };
+type RealShipment = {
+  id: string;
+  trackingId: string;
+  receiverCity: string;
+  status: string;
+  assignedAgentId: string | null;
+};
+
+function RealDispatchPanel() {
+  const queryClient = useQueryClient();
+  const { data: unassigned = [] } = useQuery({
+    queryKey: ["shipments", "unassigned"],
+    queryFn: async (): Promise<RealShipment[]> => {
+      const res = await fetch("/api/shipments?scope=unassigned");
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.shipments ?? [];
+    },
+    refetchInterval: 6000,
+  });
+  const { data: agents = [] } = useQuery({
+    queryKey: ["agents"],
+    queryFn: async (): Promise<RealAgent[]> => {
+      const res = await fetch("/api/agents");
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.agents ?? [];
+    },
+  });
+  const [selectedAgentByShipment, setSelectedAgentByShipment] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function assignAndDispatch(shipmentId: string) {
+    const agentId = selectedAgentByShipment[shipmentId];
+    if (!agentId) {
+      toast.error("Pick a delivery agent first");
+      return;
+    }
+    setBusyId(shipmentId);
+    try {
+      const assignRes = await fetch(`/api/shipments/${shipmentId}/assign`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ agentId }),
+      });
+      if (!assignRes.ok) {
+        const data = await assignRes.json().catch(() => ({}));
+        toast.error(data.error || "Assign failed");
+        return;
+      }
+      const statusRes = await fetch(`/api/shipments/${shipmentId}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "out_for_delivery", note: "Dispatched from hub." }),
+      });
+      if (!statusRes.ok) {
+        const data = await statusRes.json().catch(() => ({}));
+        toast.error(data.error || "Dispatch failed");
+        return;
+      }
+      toast.success("Assigned and dispatched (real database write)");
+      queryClient.invalidateQueries({ queryKey: ["shipments", "unassigned"] });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (unassigned.length === 0) return null;
+
+  return (
+    <div className="border rounded-lg bg-card p-4 space-y-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <Truck className="h-4 w-4" /> Real dispatch queue (writes to database)
+      </div>
+      <div className="space-y-2">
+        {unassigned.map((s) => (
+          <div
+            key={s.id}
+            className="flex items-center justify-between gap-3 border rounded-md p-3 text-xs bg-muted/20"
+          >
+            <div>
+              <div className="font-mono font-semibold">{s.trackingId}</div>
+              <div className="text-muted-foreground">
+                To {s.receiverCity} · <span className="capitalize">{s.status.replace(/_/g, " ")}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select
+                value={selectedAgentByShipment[s.id] ?? ""}
+                onValueChange={(v) => setSelectedAgentByShipment((prev) => ({ ...prev, [s.id]: v }))}
+              >
+                <SelectTrigger className="h-8 w-40 text-xs">
+                  <SelectValue placeholder="Pick agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  {agents.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                className="h-8 text-xs"
+                disabled={busyId === s.id}
+                onClick={() => assignAndDispatch(s.id)}
+              >
+                Assign & dispatch
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export interface DispatchBatch {
   id: string;
@@ -173,6 +293,8 @@ function HubDispatchPage() {
           </Button>
         </div>
       </div>
+
+      <RealDispatchPanel />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

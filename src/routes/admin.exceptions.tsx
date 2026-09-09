@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,96 @@ export const Route = createFileRoute("/admin/exceptions")({
   }),
   component: AdminExceptionsPage,
 });
+
+type RealException = {
+  id: string;
+  shipmentId: string | null;
+  type: string;
+  severity: "info" | "warning" | "critical";
+  message: string;
+  resolved: boolean;
+  createdAt: string;
+};
+
+function RealExceptionsPanel() {
+  const queryClient = useQueryClient();
+  const { data: realExceptions = [], isFetching } = useQuery({
+    queryKey: ["exceptions"],
+    queryFn: async (): Promise<RealException[]> => {
+      const res = await fetch("/api/exceptions");
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.exceptions ?? [];
+    },
+    refetchInterval: 8000,
+  });
+  const [detecting, setDetecting] = useState(false);
+
+  async function runDetection() {
+    setDetecting(true);
+    try {
+      const res = await fetch("/api/exceptions/detect", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Detection failed");
+        return;
+      }
+      toast.success(
+        data.created.length
+          ? `Detected ${data.created.length} new exception(s) from live shipment data.`
+          : "No new exceptions found — all monitored shipments are within thresholds.",
+      );
+      queryClient.invalidateQueries({ queryKey: ["exceptions"] });
+    } finally {
+      setDetecting(false);
+    }
+  }
+
+  async function resolve(id: string) {
+    await fetch(`/api/exceptions/${id}/resolve`, { method: "PATCH" });
+    queryClient.invalidateQueries({ queryKey: ["exceptions"] });
+    toast.success("Exception resolved");
+  }
+
+  return (
+    <div className="border rounded-lg bg-card p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <ShieldAlert className="h-4 w-4" /> Live exceptions (real, rule-based detection)
+        </div>
+        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={runDetection} disabled={detecting}>
+          <RefreshCcw className="h-3.5 w-3.5" /> {detecting || isFetching ? "Scanning..." : "Run detection now"}
+        </Button>
+      </div>
+      {realExceptions.length === 0 ? (
+        <div className="text-xs text-muted-foreground">
+          No open exceptions right now. Detection checks: stationary &gt;48h, delayed past ETA, repeated failed
+          deliveries.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {realExceptions.map((e) => (
+            <div key={e.id} className="flex items-center justify-between gap-3 border rounded-md p-3 text-xs bg-muted/20">
+              <div>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] mr-2 ${e.severity === "critical" ? "border-red-300 text-red-600" : e.severity === "warning" ? "border-amber-300 text-amber-600" : ""}`}
+                >
+                  {e.severity}
+                </Badge>
+                <span className="font-medium">{e.type.replace(/_/g, " ")}</span>
+                <div className="text-muted-foreground mt-1">{e.message}</div>
+              </div>
+              <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => resolve(e.id)}>
+                Resolve
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export interface ExceptionItem {
   id: string;
@@ -121,6 +212,8 @@ function AdminExceptionsPage() {
           </Button>
         </div>
       </div>
+
+      <RealExceptionsPanel />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
