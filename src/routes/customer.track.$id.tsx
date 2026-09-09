@@ -1,16 +1,67 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { shipments, timeline } from "@/lib/mock-data";
+import { shipments, timeline, type Shipment } from "@/lib/mock-data";
 import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { RouteMap } from "@/components/shiplync/RouteMap";
 import { Timeline } from "@/components/shiplync/Timeline";
 import { Button } from "@/components/ui/button";
 import { Phone, MessageSquare, Share2, ShieldCheck, Camera, Sparkles, ArrowLeft } from "lucide-react";
 
+// Maps our real (DB-backed) shipment status enum to an approximate progress
+// percentage so it can reuse the existing mock-data-driven timeline/map UI.
+const STATUS_PROGRESS: Record<string, number> = {
+  booked: 5,
+  payment_completed: 10,
+  picked_up: 25,
+  arrived_hub: 40,
+  in_transit: 60,
+  out_for_delivery: 85,
+  delivery_attempted: 90,
+  delivered: 100,
+  returned: 100,
+  cancelled: 0,
+};
+
+async function fetchRealShipment(trackingId: string): Promise<Shipment | null> {
+  if (typeof window === "undefined") return null; // client-side only, see PROGRESS_REPORT.md
+  try {
+    const res = await fetch(`/api/shipments/track/${encodeURIComponent(trackingId)}`);
+    if (!res.ok) return null;
+    const { shipment } = await res.json();
+    const progress = STATUS_PROGRESS[shipment.status] ?? 0;
+    return {
+      id: shipment.trackingId,
+      tracking: shipment.trackingId,
+      from: shipment.senderAddressLine,
+      to: shipment.receiverAddressLine,
+      fromCity: shipment.senderCity,
+      toCity: shipment.receiverCity,
+      status: shipment.status === "returned" || shipment.status === "cancelled"
+        ? "exception"
+        : (shipment.status as Shipment["status"]),
+      weight: shipment.weightKg,
+      packageType: (shipment.packageType.charAt(0).toUpperCase() +
+        shipment.packageType.slice(1)) as Shipment["packageType"],
+      medical: shipment.packageType === "medical",
+      eta: shipment.estimatedDeliveryAt
+        ? new Date(shipment.estimatedDeliveryAt).toLocaleString()
+        : "TBD",
+      price: shipment.cost,
+      progress,
+      bookedAt: shipment.createdAt,
+      sustainability: 70,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export const Route = createFileRoute("/customer/track/$id")({
-  loader: ({ params }) => {
-    const s = shipments.find((x) => x.id === params.id);
-    if (!s) throw notFound();
-    return s;
+  loader: async ({ params }) => {
+    const mock = shipments.find((x) => x.id === params.id);
+    if (mock) return mock;
+    const real = await fetchRealShipment(params.id);
+    if (real) return real;
+    throw notFound();
   },
   head: ({ loaderData }) => ({
     meta: [

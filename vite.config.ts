@@ -12,4 +12,9 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Deploying to Render (plain Node), not Cloudflare Workers — force the
+  // node-server preset so we can use a normal TCP Postgres driver against Supabase.
+  nitro: {
+    preset: "node-server",
+  },
 });
