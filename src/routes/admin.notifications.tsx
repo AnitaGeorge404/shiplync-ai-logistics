@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { notifications as initialNotifications } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +55,47 @@ export const Route = createFileRoute("/admin/notifications")({
   }),
   component: AdminNotificationsPage,
 });
+
+type RealNotification = {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  read: boolean;
+  createdAt: string;
+};
+
+function RealNotificationsPanel() {
+  const { data: real = [] } = useQuery({
+    queryKey: ["notifications", "mine"],
+    queryFn: async (): Promise<RealNotification[]> => {
+      const res = await fetch("/api/notifications");
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.notifications ?? [];
+    },
+    refetchInterval: 10000,
+  });
+
+  if (real.length === 0) return null;
+
+  return (
+    <div className="border rounded-lg bg-card p-4 space-y-2">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <Bell className="h-4 w-4" /> Real notifications (from database, this account)
+      </div>
+      {real.slice(0, 8).map((n) => (
+        <div key={n.id} className="text-xs border-b last:border-0 py-2 flex items-start justify-between gap-3">
+          <div>
+            <div className="font-medium">{n.title}</div>
+            <div className="text-muted-foreground">{n.message}</div>
+          </div>
+          {!n.read && <Badge className="text-[10px] shrink-0">New</Badge>}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export interface NotificationItem {
   id: string;
@@ -165,6 +207,8 @@ function AdminNotificationsPage() {
           </Button>
         </div>
       </div>
+
+      <RealNotificationsPanel />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

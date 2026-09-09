@@ -16,65 +16,76 @@ ShipLync is a courier & logistics management platform covering the full shipment
 |---|---|
 | **UI** | Complete for all four portals. Every screen in the SRS/README scope is built (not stubbed) using React 19 + TanStack Start + Tailwind. |
 | **Database** | **Real and live** — PostgreSQL hosted on Supabase, schema managed with Drizzle ORM. 13 tables covering users, shipments, shipment events (audit trail), hubs, vehicles, delivery attempts, payments, notifications, and exceptions — modeled directly from SRS section 4 (REQ-1 through REQ-7). |
-| **Backend** | **Real and live** — TanStack Start server routes backed by better-auth (real sessions, hashed passwords, role field) and a typed API layer with Zod validation. No longer a static mock array for the flows listed below. |
-| **Integration** | Demonstrated end-to-end for the **customer shipment flow**: sign up/sign in → book shipment → real cost + tracking ID generated server-side → persisted to Postgres → visible in shipment history → trackable by tracking ID. Verified both via the UI and directly against the running API (see Section 6). |
+| **Backend** | **Real and live** — TanStack Start server routes backed by better-auth (real sessions, hashed passwords, role field) and a typed API layer with Zod validation covering the full shipment lifecycle, not just booking. |
+| **Integration** | Demonstrated end-to-end across **all four roles**: a customer books a shipment → hub staff scans it in and dispatches it to a delivery agent → the agent advances its status and records a delivery outcome → the system auto-detects exceptions from real data → the customer sees live status and notifications. Verified both via the UI and directly against the running API (Section 6). |
 
 ## 3. Functionalities — Completed
 
-- **REQ-1 User Management**: Real registration & login (email/password) via better-auth, sessions persisted server-side, role field (`customer`/`delivery_agent`/`hub_staff`/`admin`) on the user model, server-side session validation on every API call.
-- **REQ-2 Shipment Request and Creation**: Customer booking form submits real sender/receiver/parcel data; server validates input (Zod), computes cost deterministically from weight/package type/priority/insurance (`src/lib/pricing.ts`), generates a unique tracking ID, and persists the shipment.
-- **REQ-2.4 Critical delivery prioritization**: Medical packages are automatically escalated to at least "high" priority server-side, independent of what the form sends.
-- **REQ-3 partial (status display)**: Shipment status, cost, and an initial ETA estimate are stored and returned by the tracking API; the customer tracking page renders real DB-backed shipments (in addition to the original demo data) through the existing map/timeline UI.
-- Shipment audit trail: every status change is recorded as an append-only `shipment_events` row (this is what REQ-3.1–3.2 and the timeline UI are meant to read from).
-- All four portal UIs (Customer, Delivery Agent, Hub Staff, Admin) — dashboards, booking, tracking, deliveries, hub intake/dispatch, exceptions, fleet, users, reports, settings — built and navigable.
+- **REQ-1 User Management**: Real registration & login (email/password) via better-auth, sessions persisted server-side, role field (`customer`/`delivery_agent`/`hub_staff`/`admin`) on the user model, server-side role checks on every write endpoint.
+- **REQ-2 Shipment Request and Creation**: Customer booking form submits real sender/receiver/parcel data; server validates input (Zod), computes cost deterministically from weight/package type/priority/insurance (`src/lib/pricing.ts`), generates a unique tracking ID, persists the shipment.
+- **REQ-2.4 Critical delivery prioritization**: Medical packages are automatically escalated to at least "high" priority server-side (verified: a "normal" priority medical booking was auto-escalated to "high" in the persisted row).
+- **REQ-3 Shipment Tracking and Status Management**: Full status lifecycle (`booked → arrived_hub → out_for_delivery → delivered`, etc.) is written by hub staff and delivery agents through role-gated endpoints, not just read by customers. Every transition is appended to `shipment_events`, giving a real audit trail that the existing tracking-timeline UI renders.
+- **REQ-4 Pickup, Delivery, and Assignment Management**: Hub Dispatch screen has a live panel that assigns a real delivery agent to an unassigned shipment and dispatches it — writes `assignedAgentId` and advances status in one action.
+- **REQ-5 Hub and Transit Operations**: Hub Intake screen has a live scan panel — entering a real tracking ID looks it up and marks it `arrived_hub` in the database.
+- **REQ-6 Delivery Exceptions and Returns**: Delivery agents record real delivery attempts (delivered / receiver unavailable / refused / rescheduled / returned) via the Driver Deliveries screen; failed attempts move the shipment to `delivery_attempted`, a `returned` outcome moves it to `returned`, and `delivered` sets `deliveredAt`.
+- **REQ-7 Administrative Monitoring**: Admin Exceptions screen runs a real, deterministic detection sweep (`src/lib/exception-detection.ts`) against live shipment data — three rules: **stationary >48h** (matches the SRS 4.7 example verbatim), **delayed past ETA**, and **repeated failed deliveries (≥2)** — and lets admins resolve flagged exceptions.
+- **Notifications**: A notification row is created on every meaningful event (booked, agent assigned, delivery failed, delivered, etc.) and the Admin Notifications screen shows a live feed of the signed-in account's real notifications.
+- **Reports**: Admin Reports screen has a working "Export real shipments (CSV)" button that streams a live CSV from the database.
+- All four portal UIs — dashboards, booking, tracking, deliveries, hub intake/dispatch, exceptions, fleet, users, reports, settings — built, navigable, and now backed by real write paths for every core workflow above.
 
 ## 4. Functionalities — Partially completed
 
-- **REQ-3 (full tracking)**: Only the customer-facing tracking read path is wired to the DB; live status *updates* from delivery agents/hub staff are not yet writing to the real database (still mock UI).
-- **REQ-4 Pickup/Assignment**: Data model exists (`assignedAgentId`, `assignedVehicleId` on `shipments`), but the assignment UI in the Hub/Admin portals is not yet wired to real writes.
-- **REQ-5 Hub/Transit Operations**: Hub tables (`hubs`, `vehicles`) exist in the DB; intake/scan/dispatch screens are still UI-only.
-- **REQ-7 Admin Monitoring**: `exceptions` table and severity/type enums exist in the schema (stationary-too-long, repeated failed delivery, delayed-beyond-threshold, etc., matching REQ-7.4), but the detection logic that populates it automatically is not yet implemented — this is designed, not running.
-- Notifications: schema and one write path exist (a notification is created on shipment booking); the notifications UI still reads mock data.
+- Real-time propagation of status changes to other portals currently relies on **polling** (5–10s refetch intervals via react-query on the wired panels), not the sub-2-second push the SRS P3 describes as ideal — acceptable for the demo, listed as a follow-up.
+- The originally mock-data-driven tables on these screens (e.g. the full Dispatch batch table, Hub intake scan history) still show illustrative demo rows alongside the new real panels — the real panels are additive so the existing polished UI wasn't torn out mid-review; a full swap-over is the natural next step.
+- Assignment currently supports agent-only (vehicle/hub reassignment endpoints exist server-side — `POST /api/shipments/:id/assign` accepts `vehicleId`/`hubId` too — but no UI control for those two yet).
 
 ## 5. Functionalities — Yet to be implemented
 
-- **REQ-6 Delivery Exceptions and Returns**: `delivery_attempts` table exists; no API/UI wiring yet.
-- Delivery-agent and hub-staff write flows (pickup confirmation, hub scan, dispatch, delivery attempt/OTP/signature).
-- Automated exception detection (the "AI monitoring" described in the README) — planned as deterministic rule evaluation over `shipment_events` timestamps, not implemented yet.
-- Reports export (CSV/PDF/Excel).
-- Real-time propagation of status changes to other portals (current plan: react-query polling, per SRS P3's 2-second requirement — not yet added).
+- OTP/photo/signature capture for proof of delivery (schema fields exist on `delivery_attempts`; no capture UI).
+- PDF/Excel report formats (CSV is implemented; the "Generate Custom Report" dialog is still UI-only for other formats).
 - Payment gateway integration — payments are modeled and recorded, not actually processed (explicitly out of scope without a real gateway account).
+- Scheduled/automatic exception detection (currently triggered on-demand by an admin action or the page's periodic refetch, not a background cron job).
 
 ## 6. Backend/database verification (for the demo)
 
-The following was tested directly against the running server during development, independent of the UI, to confirm the integration is real and not simulated:
+Verified directly against the running server, independent of the UI:
 
-1. `POST /api/auth/sign-up/email` → creates a real row in the `user` table (Supabase), returns a real session token.
-2. `POST /api/shipments` (authenticated) → server computed `cost: 932.2` from weight/package-type/insurance inputs and generated tracking ID `SLX4D3P6H4D06`; row persisted in the `shipments` table, plus a `shipment_events` "booked" row and a `notifications` row.
-3. `GET /api/shipments/track/:trackingId` → returns the persisted shipment (public tracking lookup, no auth required, per SRS REQ-3.3).
-4. `GET /api/shipments` (authenticated) → returns only the logged-in customer's shipments (role/ownership scoping).
+1. `POST /api/auth/sign-up/email` → real row in `user` table, real session.
+2. `POST /api/shipments` → server computed cost and tracking ID, persisted; a "medical" package sent with `priority: "normal"` was **auto-escalated to `"high"`** server-side (REQ-2.4).
+3. **Full lifecycle chain** run against a fresh shipment: hub staff scan → `PATCH /status → arrived_hub` → `POST /assign` (real delivery agent) → `PATCH /status → out_for_delivery` → agent `POST /attempts {outcome:"delivered"}` → final `GET /track` returned `status: "delivered"` with a complete event trail: `booked → arrived_hub → arrived_hub → out_for_delivery → delivered`.
+4. `POST /api/exceptions/detect` → after two failed delivery attempts were logged on a shipment, the detector correctly created a `repeated_failed_delivery` exception with a human-readable message, retrievable via `GET /api/exceptions`.
+5. `GET /api/reports/shipments.csv` (admin-only) → returns a real CSV of persisted shipments.
+6. `GET /api/notifications` → returns the real notification rows generated by the above actions.
 
-To reproduce live during the demo: run `npm run dev`, sign up as a new customer, book a shipment, then view it in **Shipment History** and via its tracking link — the tracking ID and cost shown are computed by the server, not hardcoded.
+Demo accounts (all use password `shiplync-demo-2026`, created by `scripts/seed.mjs`):
+- `hub1@shiplync.test` — hub staff (Bengaluru Dispatch Center)
+- `agent1@shiplync.test` — delivery agent (Ravi Kumar)
+- `admin1@shiplync.test` — admin
+
+To reproduce live: run `npm run dev`, sign in as the customer, book a shipment, then sign in (separate browser/incognito) as `hub1@shiplync.test` to scan it in and dispatch it via **Hub → Intake / Dispatch**, then as `agent1@shiplync.test` to advance and complete it via **Driver → Deliveries**, then as `admin1@shiplync.test` to run detection and export the CSV via **Admin → Exceptions / Reports**.
 
 ## 7. Significant changes from the original design
 
-- **Database**: SRS calls for "a centralized cloud database" without naming a product. We chose **Supabase Postgres** (team preference) with **Drizzle ORM** for type-safe queries and schema management.
+- **Database**: SRS calls for "a centralized cloud database" without naming a product. We chose **Supabase Postgres** with **Drizzle ORM** for type-safe queries and schema management.
 - **Deployment target**: The Lovable-generated scaffold defaulted to Cloudflare Workers (via Nitro). We moved this to a standard **Node server target**, since the team is deploying to **Render**, and Cloudflare Workers cannot open the raw TCP connections Postgres needs without extra infrastructure (Hyperdrive) we don't need here.
-- **Auth**: SRS just requires "secure login credentials" and role-based access; we implemented this with **better-auth** (hashed passwords, real sessions, role stored on the user record) rather than building session handling from scratch.
-- **Pricing/ETA "AI"**: The README describes an elaborate AI ETA/routing engine. For this phase we implemented it as a documented, deterministic rule set (base fare + weight rate + package-type surcharge + priority multiplier; ETA bucketed by priority/package type) rather than a black-box model — consistent with the SRS's actual wording ("calculate shipment charges based on **predefined attributes**").
+- **Auth**: Implemented with **better-auth** (hashed passwords, real sessions, role stored on the user record) rather than building session handling from scratch.
+- **Pricing/ETA "AI"**: The README describes an elaborate AI ETA/routing engine. We implemented it as a documented, deterministic rule set (base fare + weight rate + package-type surcharge + priority multiplier; ETA bucketed by priority/package type) rather than a black-box model — consistent with the SRS's actual wording ("calculate shipment charges based on **predefined attributes**").
+- **Exception detection**: Implemented as three explicit, auditable threshold rules over real timestamps (not a trained model) — directly traceable to SRS REQ-7.4's own example ("a package remains stationary at a hub for 48 hours").
+- **UI integration strategy**: Rather than rewriting each heavily-designed existing screen wholesale (high risk of breaking a working, polished UI under a review deadline), real-data panels were added additively to the Driver, Hub, and Admin screens that actually perform the database writes, sitting alongside the original illustrative UI.
 
 ## 8. Problems/challenges encountered
 
-- **Cloudflare vs. Node target**: The project's Vite config silently defaulted to a Cloudflare Workers build, which is incompatible with a normal Postgres driver. Resolved by explicitly pinning the Nitro preset to `node-server`.
-- **better-auth ⇄ Drizzle schema drift**: better-auth expects additional columns on its `account`/`verification` tables (OAuth token fields, `updatedAt`) beyond the minimal shape we first wrote. Diagnosed from the server's own schema-mismatch error log and fixed by extending the Drizzle schema to match.
-- **`drizzle-kit push` instability**: The CLI's schema-diff/introspection crashed on a second run against the live Supabase database (a tooling bug unrelated to our schema). Worked around by applying the small remaining column diff as a direct SQL patch (`scripts/fix-account-columns.mjs`) instead of relying on the CLI for that step.
-- **Supabase pooled connection**: The pooled (pgbouncer) connection string doesn't support prepared statements; the Postgres client is explicitly configured with `prepare: false` to avoid silent query failures.
-- **Time constraint**: given the review deadline, we prioritized proving one complete, real vertical slice (auth → booking → persistence → tracking) end-to-end over partially wiring every screen — the remaining screens are UI-complete and are the next work items (see Section 4/5), not redesigns.
+- **Cloudflare vs. Node target**: The project's Vite config silently defaulted to a Cloudflare Workers build, incompatible with a normal Postgres driver. Resolved by pinning the Nitro preset to `node-server`.
+- **better-auth ⇄ Drizzle schema drift**: better-auth expects additional columns on its `account`/`verification` tables (OAuth token fields, `updatedAt`) beyond the minimal shape first written. Diagnosed from the server's own schema-mismatch error log and fixed by extending the Drizzle schema.
+- **`drizzle-kit push` instability**: The CLI's introspection crashed on a second run against the live Supabase database. Worked around by applying the remaining column diff as a direct SQL patch (`scripts/fix-account-columns.mjs`).
+- **Supabase pooled connection**: The pooled (pgbouncer) connection doesn't support prepared statements; the Postgres client is explicitly configured with `prepare: false`.
+- **better-auth CORS/origin check**: Local dev ran on a non-default port (8081, since 8080 was occupied), and better-auth rejected requests as "Invalid origin" until common dev ports were added to `trustedOrigins`.
+- **Time constraint**: given the review deadline, backend logic and its correctness were prioritized over rewriting every existing mock screen — each REQ area now has a genuine, tested, real write path even where the surrounding screen still also shows illustrative demo rows.
 
 ## 9. Next steps (post-review)
 
-1. Wire delivery-agent and hub-staff status-update actions to real writes (advances REQ-4–REQ-6).
-2. Implement the exception-detection job against `shipment_events` (REQ-7.4).
-3. Add polling/live-refresh for cross-portal status visibility (SRS P3).
-4. CSV export for admin reports.
+1. Fully retire the remaining mock-data-only tables in favor of the real panels.
+2. Add vehicle/hub reassignment controls to the Hub Dispatch UI (endpoints already support it).
+3. Move exception detection to a scheduled job instead of on-demand/polling.
+4. Add OTP/photo/signature capture for proof of delivery.
 5. Deploy to Render with the Supabase connection string as an environment variable.

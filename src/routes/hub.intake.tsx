@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useMemo } from "react";
+import { PackageSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +49,75 @@ export const Route = createFileRoute("/hub/intake")({
   }),
   component: HubIntakePage,
 });
+
+function RealIntakeScan() {
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ trackingId: string; status: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function scanReal(e: React.FormEvent) {
+    e.preventDefault();
+    if (!code.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const lookup = await fetch(`/api/shipments/track/${encodeURIComponent(code.trim())}`);
+      const lookupData = await lookup.json();
+      if (!lookup.ok) {
+        setError(lookupData.error || "Tracking ID not found in database.");
+        return;
+      }
+      const shipmentId = lookupData.shipment.id;
+      const res = await fetch(`/api/shipments/${shipmentId}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: "arrived_hub",
+          location: lookupData.shipment.receiverCity,
+          note: "Scanned at hub intake.",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not update shipment.");
+        return;
+      }
+      setResult({ trackingId: data.shipment.trackingId, status: data.shipment.status });
+      setCode("");
+      toast.success(`${data.shipment.trackingId} scanned — status set to arrived_hub (real DB write)`);
+    } catch {
+      setError("Network error.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="border rounded-lg bg-card p-4 space-y-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <PackageSearch className="h-4 w-4" /> Real intake scan (writes to database)
+      </div>
+      <form onSubmit={scanReal} className="flex gap-2">
+        <Input
+          placeholder="Enter a real tracking ID, e.g. SLXA158N21TS5"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          className="h-9 text-xs font-mono bg-background"
+        />
+        <Button type="submit" size="sm" className="h-9 text-xs" disabled={busy}>
+          {busy ? "Scanning..." : "Scan"}
+        </Button>
+      </form>
+      {error && <div className="text-xs text-destructive">{error}</div>}
+      {result && (
+        <div className="text-xs text-emerald-600">
+          {result.trackingId} → status updated to <strong>{result.status}</strong>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export interface ScannedParcel {
   id: string;
@@ -223,6 +293,8 @@ function HubIntakePage() {
           </Button>
         </div>
       </div>
+
+      <RealIntakeScan />
 
       {/* KPI Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
