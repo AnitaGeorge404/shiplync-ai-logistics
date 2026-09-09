@@ -8,6 +8,8 @@ import {
   exceptions,
   hubs,
   vehicles,
+  addresses,
+  payments,
   user as userTable,
 } from "../db/schema";
 import { auth } from "./auth";
@@ -74,6 +76,18 @@ const assignSchema = z.object({
   agentId: z.string().optional(),
   vehicleId: z.string().uuid().optional(),
   hubId: z.string().uuid().optional(),
+});
+
+const addressSchema = z.object({
+  label: z.string().min(1),
+  contactName: z.string().min(1),
+  contactPhone: z.string().min(6),
+  line1: z.string().min(1),
+  line2: z.string().optional(),
+  city: z.string().min(1),
+  state: z.string().min(1),
+  pincode: z.string().min(3),
+  isDefault: z.boolean().default(false),
 });
 
 const attemptSchema = z.object({
@@ -151,6 +165,25 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         type: "shipment_booked",
         title: "Shipment booked",
         message: `Your shipment ${trackingId} has been booked. Estimated delivery in ${etaHours}h.`,
+        shipmentId: shipment.id,
+      });
+
+      // No real payment gateway is wired up (see PROGRESS_REPORT.md) — a
+      // "paid" record is created immediately so payment history/invoices
+      // reflect real, persisted charge data rather than nothing at all.
+      await db.insert(payments).values({
+        shipmentId: shipment.id,
+        amount: cost,
+        method: "mock",
+        status: "paid",
+        transactionRef: `TXN-${trackingId}`,
+      });
+
+      await db.insert(notifications).values({
+        userId: user.id,
+        type: "payment_successful",
+        title: "Payment successful",
+        message: `₹${cost} charged for shipment ${trackingId}.`,
         shipmentId: shipment.id,
       });
 
@@ -446,6 +479,75 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         .from(userTable)
         .where(eq(userTable.role, "delivery_agent"));
       return json({ agents: rows });
+    }
+
+    // ---------------------------------------------------------------
+    // /api/addresses — customer saved addresses
+    // ---------------------------------------------------------------
+    if (parts[1] === "addresses" && parts.length === 2 && request.method === "GET") {
+      const user = await getSessionUser(request);
+      if (!user) return json({ error: "Not authenticated" }, 401);
+      const rows = await db
+        .select()
+        .from(addresses)
+        .where(eq(addresses.userId, user.id))
+        .orderBy(desc(addresses.isDefault), desc(addresses.createdAt));
+      return json({ addresses: rows });
+    }
+
+    if (parts[1] === "addresses" && parts.length === 2 && request.method === "POST") {
+      const user = await getSessionUser(request);
+      if (!user) return json({ error: "Not authenticated" }, 401);
+      const body = await request.json();
+      const parsed = addressSchema.safeParse(body);
+      if (!parsed.success) return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+
+      if (parsed.data.isDefault) {
+        await db.update(addresses).set({ isDefault: false }).where(eq(addresses.userId, user.id));
+      }
+
+      const [address] = await db
+        .insert(addresses)
+        .values({ userId: user.id, ...parsed.data })
+        .returning();
+      return json({ address }, 201);
+    }
+
+    if (parts[1] === "addresses" && parts.length === 3 && request.method === "DELETE") {
+      const user = await getSessionUser(request);
+      if (!user) return json({ error: "Not authenticated" }, 401);
+      await db
+        .delete(addresses)
+        .where(and(eq(addresses.id, parts[2]), eq(addresses.userId, user.id)));
+      return json({ ok: true });
+    }
+
+    // ---------------------------------------------------------------
+    // /api/payments — customer payment history / invoices
+    // ---------------------------------------------------------------
+    if (parts[1] === "payments" && request.method === "GET") {
+      const user = await getSessionUser(request);
+      if (!user) return json({ error: "Not authenticated" }, 401);
+
+      const rows = await db
+        .select({
+          id: payments.id,
+          amount: payments.amount,
+          method: payments.method,
+          status: payments.status,
+          transactionRef: payments.transactionRef,
+          createdAt: payments.createdAt,
+          shipmentId: payments.shipmentId,
+          trackingId: shipments.trackingId,
+          senderCity: shipments.senderCity,
+          receiverCity: shipments.receiverCity,
+        })
+        .from(payments)
+        .innerJoin(shipments, eq(payments.shipmentId, shipments.id))
+        .where(eq(shipments.customerId, user.id))
+        .orderBy(desc(payments.createdAt));
+
+      return json({ payments: rows });
     }
 
     // ---------------------------------------------------------------
