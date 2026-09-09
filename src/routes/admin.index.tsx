@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { StatCard } from "@/components/shiplync/StatCard";
-import { analytics, hubs, notifications, shipments } from "@/lib/mock-data";
+import { analytics, hubs } from "@/lib/mock-data";
+import { useAdminStats, useShipments, useNotifications } from "@/lib/api-hooks";
 import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,9 @@ const fleetDots = [
 ];
 
 function AdminDashboard() {
+  const { data: stats } = useAdminStats();
+  const { data: allShipments = [] } = useShipments("all");
+  const { data: liveNotifications = [] } = useNotifications();
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
@@ -48,20 +52,20 @@ function AdminDashboard() {
         <div className="flex items-center gap-2">
           <div className="rounded-full border bg-card px-3 py-1.5 text-xs flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-success animate-pulse-dot" />
-            <span className="font-medium">1,284 active</span>
-            <span className="text-muted-foreground">shipments · 214 vehicles</span>
+            <span className="font-medium">{stats?.active ?? 0} active</span>
+            <span className="text-muted-foreground">shipments</span>
           </div>
-          <Button size="sm" variant="outline">Export report</Button>
+          <Button size="sm" variant="outline" asChild><a href="/api/reports/shipments.csv">Export report</a></Button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <StatCard label="Total shipments" value="24,819" delta="+8.4%" icon={<Package />} />
-        <StatCard label="Delivered today" value="3,712" delta="+412" icon={<CheckCircle2 />} />
-        <StatCard label="Active" value="1,284" delta="Real-time" icon={<Truck />} />
-        <StatCard label="Failed" value="42" delta="−12" trend="down" icon={<AlertTriangle />} />
-        <StatCard label="Medical" value="187" hint="99.4% on-time" icon={<HeartPulse />} />
-        <StatCard label="Revenue" value="₹42.1L" delta="+12%" icon={<IndianRupee />} />
+        <StatCard label="Total shipments" value={String(stats?.total ?? 0)} icon={<Package />} />
+        <StatCard label="Delivered today" value={String(stats?.deliveredToday ?? 0)} icon={<CheckCircle2 />} />
+        <StatCard label="Active" value={String(stats?.active ?? 0)} delta="Real-time" icon={<Truck />} />
+        <StatCard label="Failed / delayed" value={String(stats?.failed ?? 0)} icon={<AlertTriangle />} />
+        <StatCard label="Medical" value={String(stats?.medical ?? 0)} icon={<HeartPulse />} />
+        <StatCard label="Revenue" value={`₹${(stats?.revenue ?? 0).toLocaleString()}`} icon={<IndianRupee />} />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -247,21 +251,17 @@ function AdminDashboard() {
             </div>
           </div>
           <div className="divide-y">
-            {shipments.map((s) => (
+            {allShipments.length === 0 && <div className="py-6 text-center text-xs text-muted-foreground">No shipments yet.</div>}
+            {allShipments.slice(0, 12).map((s: any) => (
               <div key={s.id} className="grid grid-cols-12 items-center gap-3 px-5 py-3">
                 <div className="col-span-3">
-                  <div className="text-xs font-mono">{s.tracking}</div>
-                  <div className="text-sm font-medium">{s.fromCity} → {s.toCity}</div>
+                  <div className="text-xs font-mono">{s.trackingId}</div>
+                  <div className="text-sm font-medium">{s.senderCity} → {s.receiverCity}</div>
                 </div>
-                <div className="col-span-2 text-xs">{s.packageType}</div>
-                <div className="col-span-3">
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full bg-primary" style={{ width: s.progress + "%" }} />
-                  </div>
-                  <div className="text-[10px] text-muted-foreground mt-1">{s.progress}%</div>
-                </div>
-                <div className="col-span-2 text-xs">{s.driver ?? "—"}</div>
-                <div className="col-span-2 flex justify-end"><StatusBadge status={s.status} /></div>
+                <div className="col-span-2 text-xs capitalize">{s.packageType}</div>
+                <div className="col-span-3 text-xs text-muted-foreground capitalize">{s.status.replace(/_/g, " ")}</div>
+                <div className="col-span-2 text-xs">{s.assignedAgentId ? "Assigned" : "—"}</div>
+                <div className="col-span-2 flex justify-end text-xs font-medium">₹{s.cost}</div>
               </div>
             ))}
           </div>
@@ -271,21 +271,22 @@ function AdminDashboard() {
           <div className="font-display font-semibold">Notifications</div>
           <div className="text-xs text-muted-foreground">Real-time system events</div>
           <ul className="mt-4 space-y-3">
-            {notifications.map((n) => (
+            {liveNotifications.length === 0 && <div className="text-xs text-muted-foreground">No notifications yet.</div>}
+            {liveNotifications.slice(0, 8).map((n: any) => (
               <li key={n.id} className="flex items-start gap-3 rounded-lg border p-3">
                 <span className={`h-8 w-8 rounded-full grid place-items-center shrink-0 ${
-                  n.type === "medical" ? "bg-medical/15 text-medical"
-                  : n.type === "warning" ? "bg-warning/15 text-warning-foreground"
-                  : n.type === "success" ? "bg-success/15 text-success"
+                  n.type === "medical_priority" ? "bg-medical/15 text-medical"
+                  : n.type === "delivery_failed" ? "bg-warning/15 text-warning-foreground"
+                  : n.type === "delivered" || n.type === "payment_successful" ? "bg-success/15 text-success"
                   : "bg-primary/15 text-primary"
                 }`}>
-                  {n.type === "medical" ? <HeartPulse className="h-4 w-4" /> : n.type === "warning" ? <AlertTriangle className="h-4 w-4" /> : n.type === "success" ? <CheckCircle2 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+                  {n.type === "medical_priority" ? <HeartPulse className="h-4 w-4" /> : n.type === "delivery_failed" ? <AlertTriangle className="h-4 w-4" /> : n.type === "delivered" ? <CheckCircle2 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium">{n.title}</div>
-                  <div className="text-xs text-muted-foreground">{n.body}</div>
+                  <div className="text-xs text-muted-foreground">{n.message}</div>
                 </div>
-                <div className="text-[10px] text-muted-foreground shrink-0">{n.time}</div>
+                <div className="text-[10px] text-muted-foreground shrink-0">{new Date(n.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
               </li>
             ))}
           </ul>

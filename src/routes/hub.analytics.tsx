@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { analytics } from "@/lib/mock-data";
+import { useShipments } from "@/lib/api-hooks";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,8 +37,18 @@ export const Route = createFileRoute("/hub/analytics")({
   component: HubAnalyticsPage,
 });
 
+function useRealCategoryMix() {
+  const { data: hubShipments = [] } = useShipments("hub");
+  return useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const s of hubShipments) counts[s.packageType] = (counts[s.packageType] ?? 0) + 1;
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [hubShipments]);
+}
+
 function HubAnalyticsPage() {
   const [timeRange, setTimeRange] = useState("today");
+  const categoryMix = useRealCategoryMix();
 
   return (
     <div className="space-y-6">
@@ -159,17 +170,17 @@ function HubAnalyticsPage() {
                 Package Mix & Category Distribution
               </h2>
               <p className="text-xs text-muted-foreground">
-                Sorting volume categorized by parcel tier
+                Real shipment volume at this hub, by package type
               </p>
             </div>
             <Badge variant="outline" className="text-[10px] font-normal">
-              Categorized
+              Real data
             </Badge>
           </div>
 
           <div className="h-64 pt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={analytics.categoryMix} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={categoryMix} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />

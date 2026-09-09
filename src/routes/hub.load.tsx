@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { hubs as initialHubs } from "@/lib/mock-data";
+import { useState, useMemo } from "react";
+import { useHubs, useShipments } from "@/lib/api-hooks";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -49,9 +49,23 @@ const INITIAL_BAYS: SortingBay[] = [
   { id: "BAY-05", name: "Bay 5 — North Line-Haul", load: 45, queuedItems: 34, operator: "Suresh N.", status: "Optimal" },
 ];
 
+function useHubLoads() {
+  const { data: hubs = [] } = useHubs();
+  const { data: hubShipments = [] } = useShipments("hub");
+  // Real hub identity (name/code/capacity) + a simple real occupancy signal
+  // (active shipments currently routed through this hub vs its capacity) —
+  // this is the caller's own hub only, since /api/shipments?scope=hub is
+  // scoped per-user; cross-hub live counts aren't exposed yet.
+  const activeCount = hubShipments.filter((s: any) => s.status !== "delivered" && s.status !== "cancelled").length;
+  return hubs.map((h: any) => ({
+    ...h,
+    load: h.capacity > 0 ? Math.min(100, Math.round((activeCount / h.capacity) * 100)) : 0,
+  }));
+}
+
 function HubLoadPage() {
   const [bays, setBays] = useState<SortingBay[]>(INITIAL_BAYS);
-  const [neighborHubs, setNeighborHubs] = useState(initialHubs);
+  const neighborHubs = useHubLoads();
 
   const handleRebalanceBay = (id: string, name: string) => {
     setBays((prev) =>
@@ -65,10 +79,7 @@ function HubLoadPage() {
   };
 
   const handleRerouteNeighborHub = (code: string) => {
-    setNeighborHubs((prev) =>
-      prev.map((h) => (h.code === code ? { ...h, load: Math.max(45, h.load - 20) } : h))
-    );
-    toast.success(`Triggered inter-hub load reroute for ${code}`);
+    toast.info(`Reroute recommendation logged for ${code} — cross-hub live rerouting isn't wired up yet.`);
   };
 
   return (

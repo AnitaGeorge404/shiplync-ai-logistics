@@ -25,6 +25,7 @@ import {
   KeyRound,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useShipments, useQueryClient } from "@/lib/api-hooks";
 
 export const Route = createFileRoute("/driver/my-route")({
   head: () => ({
@@ -50,20 +51,35 @@ export interface RouteStop {
   status: "Completed" | "Next Stop" | "Pending";
 }
 
-const INITIAL_STOPS: RouteStop[] = [
-  { stopNum: 1, id: "S-1", tracking: "SLX-77420-IN", recipient: "Aditi Kapoor", address: "Flat 402, Koramangala 4th Block", phone: "+91 98765 43210", type: "Medical Priority", medical: true, eta: "Delivered 11:20 AM", cod: 0, status: "Completed" },
-  { stopNum: 2, id: "S-2", tracking: "SLX-77421-IN", recipient: "Sunita Rao", address: "Plot 12, HSR Layout Sector 1", phone: "+91 98450 66310", type: "Express", medical: false, eta: "Next (11:45 AM)", cod: 480, status: "Next Stop" },
-  { stopNum: 3, id: "S-3", tracking: "SLX-77422-IN", recipient: "Kabir Mehta", address: "House 88, Indiranagar 100ft Rd", phone: "+91 98341 55430", type: "Standard", medical: false, eta: "12:10 PM", cod: 0, status: "Pending" },
-  { stopNum: 4, id: "S-4", tracking: "SLX-77423-IN", recipient: "TechCorp Logistics", address: "Building B, Whitefield Tech Park", phone: "+91 98112 44210", type: "Heavy Freight", medical: false, eta: "12:35 PM", cod: 1240, status: "Pending" },
-  { stopNum: 5, id: "S-5", tracking: "SLX-77424-IN", recipient: "Vikram S.", address: "Tower 2, Domlur Flyover Rd", phone: "+91 98901 88720", type: "Fragile", medical: false, eta: "01:05 PM", cod: 0, status: "Pending" },
-  { stopNum: 6, id: "S-6", tracking: "SLX-77425-IN", recipient: "Deepa Patel", address: "Villa 14, Sarjapur Main Rd", phone: "+91 98771 33290", type: "Standard", medical: false, eta: "01:30 PM", cod: 340, status: "Pending" },
-];
+function useRouteStops(): RouteStop[] {
+  const { data: assigned = [] } = useShipments("assigned");
+  let nextAssigned = false;
+  return assigned.map((s: any, i: number) => {
+    const status: RouteStop["status"] =
+      s.status === "delivered" ? "Completed" : !nextAssigned && (nextAssigned = true) ? "Next Stop" : "Pending";
+    return {
+      stopNum: i + 1,
+      id: s.id,
+      tracking: s.trackingId,
+      recipient: s.receiverName,
+      address: `${s.receiverAddressLine}, ${s.receiverCity}`,
+      phone: s.receiverPhone,
+      type: s.packageType,
+      medical: s.packageType === "medical",
+      eta: s.status === "delivered" ? "Delivered" : s.estimatedDeliveryAt ? new Date(s.estimatedDeliveryAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "TBD",
+      cod: 0,
+      status,
+    };
+  });
+}
 
 function DriverRoutePage() {
-  const [stops, setStops] = useState<RouteStop[]>(INITIAL_STOPS);
+  const stops = useRouteStops();
+  const queryClient = useQueryClient();
   const [isPodOpen, setIsPodOpen] = useState(false);
   const [activeStop, setActiveStop] = useState<RouteStop | null>(null);
   const [otpInput, setOtpInput] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const nextStop = stops.find((s) => s.status === "Next Stop") || stops.find((s) => s.status === "Pending");
   const completedCount = stops.filter((s) => s.status === "Completed").length;
@@ -76,25 +92,32 @@ function DriverRoutePage() {
     toast.info(`Calling ${recipient} (${phone})...`);
   };
 
-  const handleCompletePodSubmit = (e: React.FormEvent) => {
+  const handleCompletePodSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeStop) return;
-
-    setStops((prev) =>
-      prev.map((s) => {
-        if (s.id === activeStop.id) {
-          return { ...s, status: "Completed", eta: "Delivered Just now" };
-        }
-        if (s.stopNum === activeStop.stopNum + 1) {
-          return { ...s, status: "Next Stop" };
-        }
-        return s;
-      })
-    );
-
-    setIsPodOpen(false);
-    setOtpInput("");
-    toast.success(`Delivery completed for ${activeStop.recipient}! POD & OTP Verified.`);
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/shipments/${activeStop.id}/attempts`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          outcome: "delivered",
+          reason: `OTP ${otpInput} verified by delivery agent.`,
+          otpVerified: true,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Could not complete delivery");
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ["shipments", "assigned"] });
+      setIsPodOpen(false);
+      setOtpInput("");
+      toast.success(`Delivery completed for ${activeStop.recipient}! POD & OTP recorded.`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleAIReorder = () => {
@@ -315,7 +338,7 @@ function DriverRoutePage() {
               <Button type="button" variant="outline" size="sm" onClick={() => setIsPodOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" size="sm">Verify OTP & Complete POD</Button>
+              <Button type="submit" size="sm" disabled={submitting}>{submitting ? "Saving..." : "Verify OTP & Complete POD"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

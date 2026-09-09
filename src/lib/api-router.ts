@@ -15,7 +15,7 @@ import {
 import { auth } from "./auth";
 import { calculateShipmentCost, estimateDeliveryHours, generateTrackingId } from "./pricing";
 import { detectExceptions } from "./exception-detection";
-import { eq, desc, and, isNull } from "drizzle-orm";
+import { eq, desc, and, isNull, gte, sql as dsql } from "drizzle-orm";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -29,7 +29,7 @@ async function getSessionUser(request: Request) {
   return session?.user ?? null;
 }
 
-function requireRole(user: { role?: string } | null, roles: string[]) {
+function requireRole(user: { role?: string | null } | null | undefined, roles: string[]) {
   return !!user && roles.includes((user as any).role);
 }
 
@@ -88,6 +88,31 @@ const addressSchema = z.object({
   state: z.string().min(1),
   pincode: z.string().min(3),
   isDefault: z.boolean().default(false),
+});
+
+const hubSchema = z.object({
+  name: z.string().min(1),
+  code: z.string().min(1),
+  addressLine: z.string().min(1),
+  city: z.string().min(1),
+  state: z.string().min(1),
+  pincode: z.string().min(3),
+  lat: z.number(),
+  lng: z.number(),
+  capacity: z.number().int().positive().default(500),
+});
+
+const vehicleSchema = z.object({
+  hubId: z.string().uuid(),
+  registrationNumber: z.string().min(1),
+  type: z.enum(["bike", "van", "truck", "ev_bike", "ev_van"]),
+  capacityKg: z.number().positive(),
+  isElectric: z.boolean().default(false),
+});
+
+const userRoleSchema = z.object({
+  role: z.enum(["customer", "delivery_agent", "hub_staff", "admin"]),
+  hubId: z.string().uuid().optional(),
 });
 
 const attemptSchema = z.object({
@@ -432,6 +457,31 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     // ---------------------------------------------------------------
     if (parts[1] === "exceptions" && parts.length === 2 && request.method === "GET") {
       const user = await getSessionUser(request);
+      if (!requireRole(user, ["hub_staff", "admin", "delivery_agent"])) {
+        return json({ error: "Not authorized" }, 403);
+      }
+      const scope = url.searchParams.get("scope");
+
+      if (scope === "mine" && (user as any).role === "delivery_agent") {
+        const rows = await db
+          .select({
+            id: exceptions.id,
+            shipmentId: exceptions.shipmentId,
+            hubId: exceptions.hubId,
+            type: exceptions.type,
+            severity: exceptions.severity,
+            message: exceptions.message,
+            resolved: exceptions.resolved,
+            createdAt: exceptions.createdAt,
+            trackingId: shipments.trackingId,
+          })
+          .from(exceptions)
+          .innerJoin(shipments, eq(exceptions.shipmentId, shipments.id))
+          .where(and(eq(shipments.assignedAgentId, user!.id), eq(exceptions.resolved, false)))
+          .orderBy(desc(exceptions.createdAt));
+        return json({ exceptions: rows });
+      }
+
       if (!requireRole(user, ["hub_staff", "admin"])) return json({ error: "Not authorized" }, 403);
       const rows = await db
         .select()
@@ -451,7 +501,20 @@ export async function handleApiRequest(request: Request): Promise<Response> {
 
     if (parts[1] === "exceptions" && parts[3] === "resolve" && request.method === "PATCH") {
       const user = await getSessionUser(request);
-      if (!requireRole(user, ["hub_staff", "admin"])) return json({ error: "Not authorized" }, 403);
+      if (!requireRole(user, ["hub_staff", "admin", "delivery_agent"])) {
+        return json({ error: "Not authorized" }, 403);
+      }
+
+      if ((user as any).role === "delivery_agent") {
+        const [owned] = await db
+          .select({ id: exceptions.id })
+          .from(exceptions)
+          .innerJoin(shipments, eq(exceptions.shipmentId, shipments.id))
+          .where(and(eq(exceptions.id, parts[2]), eq(shipments.assignedAgentId, user!.id)))
+          .limit(1);
+        if (!owned) return json({ error: "Not authorized" }, 403);
+      }
+
       const [updated] = await db
         .update(exceptions)
         .set({ resolved: true, resolvedByUserId: user!.id, resolvedAt: new Date() })
@@ -463,14 +526,34 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     // ---------------------------------------------------------------
     // /api/hubs, /api/vehicles, /api/agents — lookups for assignment UI
     // ---------------------------------------------------------------
-    if (parts[1] === "hubs" && request.method === "GET") {
+    if (parts[1] === "hubs" && parts.length === 2 && request.method === "GET") {
       const rows = await db.select().from(hubs);
       return json({ hubs: rows });
     }
 
-    if (parts[1] === "vehicles" && request.method === "GET") {
+    if (parts[1] === "hubs" && parts.length === 2 && request.method === "POST") {
+      const user = await getSessionUser(request);
+      if (!requireRole(user, ["admin"])) return json({ error: "Not authorized" }, 403);
+      const body = await request.json();
+      const parsed = hubSchema.safeParse(body);
+      if (!parsed.success) return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      const [hub] = await db.insert(hubs).values(parsed.data).returning();
+      return json({ hub }, 201);
+    }
+
+    if (parts[1] === "vehicles" && parts.length === 2 && request.method === "GET") {
       const rows = await db.select().from(vehicles).where(eq(vehicles.active, true));
       return json({ vehicles: rows });
+    }
+
+    if (parts[1] === "vehicles" && parts.length === 2 && request.method === "POST") {
+      const user = await getSessionUser(request);
+      if (!requireRole(user, ["admin"])) return json({ error: "Not authorized" }, 403);
+      const body = await request.json();
+      const parsed = vehicleSchema.safeParse(body);
+      if (!parsed.success) return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      const [vehicle] = await db.insert(vehicles).values(parsed.data).returning();
+      return json({ vehicle }, 201);
     }
 
     if (parts[1] === "agents" && request.method === "GET") {
@@ -479,6 +562,105 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         .from(userTable)
         .where(eq(userTable.role, "delivery_agent"));
       return json({ agents: rows });
+    }
+
+    // ---------------------------------------------------------------
+    // /api/users — admin user management
+    // ---------------------------------------------------------------
+    if (parts[1] === "users" && parts.length === 2 && request.method === "GET") {
+      const user = await getSessionUser(request);
+      if (!requireRole(user, ["admin"])) return json({ error: "Not authorized" }, 403);
+      const rows = await db
+        .select({
+          id: userTable.id,
+          name: userTable.name,
+          email: userTable.email,
+          role: userTable.role,
+          phone: userTable.phone,
+          hubId: userTable.hubId,
+          createdAt: userTable.createdAt,
+        })
+        .from(userTable)
+        .orderBy(desc(userTable.createdAt));
+      return json({ users: rows });
+    }
+
+    if (parts[1] === "users" && parts.length === 3 && request.method === "PATCH") {
+      const user = await getSessionUser(request);
+      if (!requireRole(user, ["admin"])) return json({ error: "Not authorized" }, 403);
+      const body = await request.json();
+      const parsed = userRoleSchema.safeParse(body);
+      if (!parsed.success) return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      const [updated] = await db
+        .update(userTable)
+        .set({ role: parsed.data.role, hubId: parsed.data.hubId, updatedAt: new Date() })
+        .where(eq(userTable.id, parts[2]))
+        .returning({
+          id: userTable.id,
+          name: userTable.name,
+          email: userTable.email,
+          role: userTable.role,
+          hubId: userTable.hubId,
+        });
+      return json({ user: updated });
+    }
+
+    // ---------------------------------------------------------------
+    // /api/stats/overview — admin dashboard aggregates
+    // ---------------------------------------------------------------
+    if (parts[1] === "stats" && parts[2] === "overview" && request.method === "GET") {
+      const user = await getSessionUser(request);
+      if (!requireRole(user, ["admin"])) return json({ error: "Not authorized" }, 403);
+
+      const all = await db.select().from(shipments);
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+
+      const total = all.length;
+      const deliveredToday = all.filter(
+        (s) => s.status === "delivered" && s.deliveredAt && s.deliveredAt >= startOfToday,
+      ).length;
+      const active = all.filter((s) =>
+        ["picked_up", "arrived_hub", "in_transit", "out_for_delivery"].includes(s.status),
+      ).length;
+      const pending = all.filter((s) => ["booked", "payment_completed"].includes(s.status)).length;
+      const failed = all.filter((s) => ["returned", "cancelled", "delivery_attempted"].includes(s.status)).length;
+      const medical = all.filter((s) => s.packageType === "medical").length;
+
+      const deliveredWithTimes = all.filter((s) => s.deliveredAt);
+      const avgDeliveryHours =
+        deliveredWithTimes.length > 0
+          ? deliveredWithTimes.reduce(
+              (acc, s) => acc + (s.deliveredAt!.getTime() - s.createdAt.getTime()) / (1000 * 60 * 60),
+              0,
+            ) / deliveredWithTimes.length
+          : 0;
+
+      const revenueRows = await db
+        .select({ total: dsql<string>`coalesce(sum(${payments.amount}), 0)` })
+        .from(payments)
+        .where(eq(payments.status, "paid"));
+      const revenue = Number(revenueRows[0]?.total ?? 0);
+
+      const allVehicles = await db.select().from(vehicles);
+      const fleetUtilization =
+        allVehicles.length > 0
+          ? Math.round(
+              (all.filter((s) => s.assignedVehicleId).length / allVehicles.length) * 100,
+            )
+          : 0;
+
+      return json({
+        total,
+        deliveredToday,
+        active,
+        pending,
+        failed,
+        medical,
+        avgDeliveryHours: Math.round(avgDeliveryHours * 10) / 10,
+        revenue,
+        fleetUtilization,
+      });
     }
 
     // ---------------------------------------------------------------
@@ -528,8 +710,10 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     if (parts[1] === "payments" && request.method === "GET") {
       const user = await getSessionUser(request);
       if (!user) return json({ error: "Not authenticated" }, 401);
+      const scope = url.searchParams.get("scope");
+      const isAdminAll = scope === "all" && (user as any).role === "admin";
 
-      const rows = await db
+      const baseQuery = db
         .select({
           id: payments.id,
           amount: payments.amount,
@@ -543,9 +727,11 @@ export async function handleApiRequest(request: Request): Promise<Response> {
           receiverCity: shipments.receiverCity,
         })
         .from(payments)
-        .innerJoin(shipments, eq(payments.shipmentId, shipments.id))
-        .where(eq(shipments.customerId, user.id))
-        .orderBy(desc(payments.createdAt));
+        .innerJoin(shipments, eq(payments.shipmentId, shipments.id));
+
+      const rows = isAdminAll
+        ? await baseQuery.orderBy(desc(payments.createdAt)).limit(300)
+        : await baseQuery.where(eq(shipments.customerId, user.id)).orderBy(desc(payments.createdAt));
 
       return json({ payments: rows });
     }

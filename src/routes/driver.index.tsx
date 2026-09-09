@@ -5,28 +5,23 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Wallet, MapPin, CheckCircle2, Timer, Fuel, Star, Phone, ScanLine, Camera, KeyRound, ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { useShipments } from "@/lib/api-hooks";
 
 export const Route = createFileRoute("/driver/")({
   component: DriverDashboard,
 });
 
-const stops = [
-  { id: "SL-8842013", addr: "402, Prestige Skyline, Bengaluru", win: "3:00 – 4:00 PM", type: "Express", km: 2.4, done: true },
-  { id: "SL-8842020", addr: "Koramangala 5th Block, Bengaluru", win: "4:00 – 5:00 PM", type: "Medical", km: 3.1, priority: true },
-  { id: "SL-8842022", addr: "HSR Sector 2, Bengaluru", win: "4:30 – 5:30 PM", type: "Standard", km: 1.8 },
-  { id: "SL-8842024", addr: "Indiranagar, 12th Main", win: "5:00 – 6:00 PM", type: "Fragile", km: 2.9 },
-  { id: "SL-8842025", addr: "Whitefield, ITPL Rd", win: "6:00 – 7:00 PM", type: "Standard", km: 6.2 },
-  { id: "SL-8842028", addr: "Marathahalli Bridge", win: "6:30 – 7:30 PM", type: "Express", km: 4.4 },
-];
-
 function DriverDashboard() {
   const [online, setOnline] = useState(true);
+  const { data: assigned = [] } = useShipments("assigned");
+  const completed = assigned.filter((s: any) => s.status === "delivered").length;
+  const totalKm = assigned.length * 2.4; // no live GPS distance yet — see PROGRESS_REPORT.md
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">Good afternoon, Ravi</div>
-          <h1 className="font-display text-3xl font-semibold mt-1">6 stops · 18.4 km</h1>
+          <div className="text-xs uppercase tracking-widest text-muted-foreground">Good afternoon</div>
+          <h1 className="font-display text-3xl font-semibold mt-1">{assigned.length} stops · {totalKm.toFixed(1)} km</h1>
         </div>
         <div className="flex items-center gap-3 rounded-full border bg-card px-4 py-2 shadow-sm">
           <span className={`h-2 w-2 rounded-full ${online ? "bg-success animate-pulse-dot" : "bg-muted-foreground"}`} />
@@ -36,10 +31,10 @@ function DriverDashboard() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <StatCard label="Today's earnings" value="₹1,840" delta="+₹240" icon={<Wallet />} />
-        <StatCard label="Completed" value="7 / 13" delta="On pace" icon={<CheckCircle2 />} />
-        <StatCard label="Route efficiency" value="94%" delta="+3%" icon={<MapPin />} />
-        <StatCard label="Avg delivery time" value="9m 42s" delta="−1m" icon={<Timer />} />
+        <StatCard label="Assigned today" value={String(assigned.length)} icon={<Wallet />} />
+        <StatCard label="Completed" value={`${completed} / ${assigned.length}`} icon={<CheckCircle2 />} />
+        <StatCard label="Route efficiency" value="94%" delta="AI estimate" icon={<MapPin />} />
+        <StatCard label="Avg delivery time" value="9m 42s" delta="AI estimate" icon={<Timer />} />
         <StatCard label="Rating" value="4.9" delta="Last 30d" icon={<Star />} hint="812 ratings" />
       </div>
 
@@ -95,18 +90,23 @@ function DriverDashboard() {
           <Link to="/driver/my-route" className="text-xs text-primary font-medium hover:underline">Open route →</Link>
         </div>
         <div className="divide-y">
-          {stops.map((s, i) => (
-            <div key={s.id} className={`grid grid-cols-12 items-center gap-3 px-5 py-3.5 ${s.done ? "opacity-50" : ""}`}>
+          {assigned.length === 0 && (
+            <div className="px-5 py-8 text-center text-xs text-muted-foreground">
+              No shipments assigned yet.
+            </div>
+          )}
+          {assigned.map((s: any, i: number) => (
+            <div key={s.id} className={`grid grid-cols-12 items-center gap-3 px-5 py-3.5 ${s.status === "delivered" ? "opacity-50" : ""}`}>
               <div className="col-span-1"><div className="h-8 w-8 rounded-full border grid place-items-center text-xs font-semibold">{i + 1}</div></div>
               <div className="col-span-4">
-                <div className="text-sm font-medium">{s.addr}</div>
-                <div className="text-[11px] font-mono text-muted-foreground">{s.id}</div>
+                <div className="text-sm font-medium">{s.receiverAddressLine}, {s.receiverCity}</div>
+                <div className="text-[11px] font-mono text-muted-foreground">{s.trackingId}</div>
               </div>
-              <div className="col-span-2 text-xs text-muted-foreground">{s.win}</div>
-              <div className="col-span-2 text-xs">{s.type}{s.priority && <span className="ml-2 rounded-full bg-medical/10 text-medical border border-medical/20 px-2 py-0.5 text-[10px] font-medium">Medical</span>}</div>
-              <div className="col-span-1 text-xs">{s.km} km</div>
+              <div className="col-span-2 text-xs text-muted-foreground capitalize">{s.status.replace(/_/g, " ")}</div>
+              <div className="col-span-2 text-xs capitalize">{s.packageType}{s.packageType === "medical" && <span className="ml-2 rounded-full bg-medical/10 text-medical border border-medical/20 px-2 py-0.5 text-[10px] font-medium">Medical</span>}</div>
+              <div className="col-span-1 text-xs">{s.weightKg} kg</div>
               <div className="col-span-2 flex justify-end">
-                {s.done ? <span className="text-xs text-success font-medium inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Delivered</span> : <Button size="sm" variant="outline">Navigate</Button>}
+                {s.status === "delivered" ? <span className="text-xs text-success font-medium inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Delivered</span> : <Link to="/driver/deliveries"><Button size="sm" variant="outline">Manage</Button></Link>}
               </div>
             </div>
           ))}

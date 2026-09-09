@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { drivers as initialDrivers } from "@/lib/mock-data";
+import { useVehicles, useHubs, useQueryClient } from "@/lib/api-hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,83 +55,61 @@ export const Route = createFileRoute("/admin/fleet")({
   component: AdminFleetPage,
 });
 
-export interface VehicleItem {
-  id: string;
-  regNumber: string;
-  type: "EV Cargo" | "EV Van" | "Medical Bike" | "Mini Van" | "Bike" | "Line-Haul Truck";
-  driver: string;
-  city: string;
-  battery: number;
-  status: "On Duty" | "Charging" | "Maintenance" | "Idle";
-}
-
-const INITIAL_FLEET: VehicleItem[] = [
-  { id: "VEH-101", regNumber: "KA-05-EV-2210", type: "EV Cargo", driver: "Ravi Kumar", city: "Bengaluru", battery: 88, status: "On Duty" },
-  { id: "VEH-102", regNumber: "DL-8C-AB-7788", type: "Medical Bike", driver: "Anita Sharma", city: "Delhi", battery: 94, status: "On Duty" },
-  { id: "VEH-103", regNumber: "TN-09-CD-1120", type: "Mini Van", driver: "Suresh N.", city: "Chennai", battery: 64, status: "On Duty" },
-  { id: "VEH-104", regNumber: "MH-12-AZ-9901", type: "Bike", driver: "Manish D.", city: "Pune", battery: 42, status: "Idle" },
-  { id: "VEH-105", regNumber: "MH-02-EV-4412", type: "EV Van", driver: "Priya R.", city: "Mumbai", battery: 78, status: "On Duty" },
-  { id: "VEH-106", regNumber: "KA-01-EV-8820", type: "EV Cargo", driver: "Unassigned", city: "Bengaluru", battery: 100, status: "Charging" },
-  { id: "VEH-107", regNumber: "DL-04-TR-5510", type: "Line-Haul Truck", driver: "Vikram S.", city: "Delhi", battery: 55, status: "Maintenance" },
-];
+const VEHICLE_TYPES = ["bike", "van", "truck", "ev_bike", "ev_van"] as const;
 
 function AdminFleetPage() {
-  const [fleetList, setFleetList] = useState<VehicleItem[]>(INITIAL_FLEET);
+  const { data: fleetList = [] } = useVehicles();
+  const { data: hubsList = [] } = useHubs();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
   const [isAddVehicleOpen, setIsAddVehicleOpen] = useState(false);
 
   const [newReg, setNewReg] = useState("");
-  const [newType, setNewType] = useState<VehicleItem["type"]>("EV Van");
-  const [newCity, setNewCity] = useState("Bengaluru");
+  const [newType, setNewType] = useState<(typeof VEHICLE_TYPES)[number]>("ev_van");
+  const [newHubId, setNewHubId] = useState("");
+  const [newCapacity, setNewCapacity] = useState("250");
 
   const filteredFleet = useMemo(() => {
-    return fleetList.filter((v) => {
-      const matchesSearch =
-        v.regNumber.toLowerCase().includes(search.toLowerCase()) ||
-        v.driver.toLowerCase().includes(search.toLowerCase()) ||
-        v.city.toLowerCase().includes(search.toLowerCase()) ||
-        v.type.toLowerCase().includes(search.toLowerCase());
-
-      const matchesStatus = statusFilter === "ALL" || v.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [fleetList, search, statusFilter]);
+    return fleetList.filter(
+      (v: any) =>
+        v.registrationNumber.toLowerCase().includes(search.toLowerCase()) ||
+        v.type.toLowerCase().includes(search.toLowerCase()),
+    );
+  }, [fleetList, search]);
 
   const stats = useMemo(() => {
     const total = fleetList.length;
-    const onDuty = fleetList.filter((v) => v.status === "On Duty").length;
-    const evCount = fleetList.filter((v) => v.type.startsWith("EV")).length;
-    const maintenance = fleetList.filter((v) => v.status === "Maintenance").length;
-
-    return { total, onDuty, evCount, maintenance };
+    const evCount = fleetList.filter((v: any) => v.isElectric).length;
+    const active = fleetList.filter((v: any) => v.active).length;
+    return { total, evCount, active };
   }, [fleetList]);
 
-  const handleAddVehicle = (e: React.FormEvent) => {
+  const handleAddVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newReg) return;
-
-    const newVehicle: VehicleItem = {
-      id: `VEH-${Math.floor(100 + Math.random() * 900)}`,
-      regNumber: newReg.toUpperCase(),
-      type: newType,
-      driver: "Unassigned",
-      city: newCity,
-      battery: 100,
-      status: "Idle",
-    };
-
-    setFleetList([newVehicle, ...fleetList]);
+    if (!newReg || !newHubId) {
+      toast.error("Registration number and hub are required");
+      return;
+    }
+    const res = await fetch("/api/vehicles", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        registrationNumber: newReg.toUpperCase(),
+        type: newType,
+        hubId: newHubId,
+        capacityKg: Number(newCapacity),
+        isElectric: newType.startsWith("ev_"),
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Could not register vehicle");
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ["vehicles"] });
     setIsAddVehicleOpen(false);
     setNewReg("");
-    toast.success(`Registered vehicle ${newVehicle.regNumber}`);
-  };
-
-  const handleStatusChange = (id: string, newStatus: VehicleItem["status"]) => {
-    setFleetList((prev) =>
-      prev.map((v) => (v.id === id ? { ...v, status: newStatus } : v))
-    );
-    toast.success(`Vehicle status updated to ${newStatus}`);
+    toast.success(`Registered vehicle ${newReg.toUpperCase()}`);
   };
 
   return (
@@ -176,9 +154,9 @@ function AdminFleetPage() {
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            On Duty <CheckCircle2 className="h-4 w-4 text-foreground" />
+            Active <CheckCircle2 className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats.onDuty}</div>
+          <div className="text-2xl font-semibold font-display mt-2">{stats.active}</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
@@ -190,9 +168,9 @@ function AdminFleetPage() {
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Maintenance <Wrench className="h-4 w-4 text-foreground" />
+            Hubs Covered <Wrench className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats.maintenance}</div>
+          <div className="text-2xl font-semibold font-display mt-2">{hubsList.length}</div>
         </div>
       </div>
 
@@ -201,25 +179,12 @@ function AdminFleetPage() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="Search reg number, driver, city..."
+            placeholder="Search reg number, type..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-8 h-9 text-xs bg-background"
           />
         </div>
-
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[140px] h-9 text-xs bg-background">
-            <SelectValue placeholder="Status Filter" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Statuses</SelectItem>
-            <SelectItem value="On Duty">On Duty</SelectItem>
-            <SelectItem value="Charging">Charging</SelectItem>
-            <SelectItem value="Maintenance">Maintenance</SelectItem>
-            <SelectItem value="Idle">Idle</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       {/* Fleet Table */}
@@ -227,83 +192,54 @@ function AdminFleetPage() {
         <Table>
           <TableHeader className="bg-muted/40">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="text-xs font-medium">Registration & ID</TableHead>
+              <TableHead className="text-xs font-medium">Registration</TableHead>
               <TableHead className="text-xs font-medium">Vehicle Type</TableHead>
-              <TableHead className="text-xs font-medium">Assigned Driver</TableHead>
-              <TableHead className="text-xs font-medium">City</TableHead>
-              <TableHead className="text-xs font-medium">Battery / Charge</TableHead>
+              <TableHead className="text-xs font-medium">Hub</TableHead>
+              <TableHead className="text-xs font-medium">Capacity</TableHead>
+              <TableHead className="text-xs font-medium">Electric</TableHead>
               <TableHead className="text-xs font-medium">Status</TableHead>
-              <TableHead className="w-12 text-right text-xs font-medium"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredFleet.map((v) => (
+            {filteredFleet.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-8">
+                  No vehicles registered yet.
+                </TableCell>
+              </TableRow>
+            )}
+            {filteredFleet.map((v: any) => (
               <TableRow key={v.id} className="text-xs hover:bg-muted/30">
                 <TableCell className="py-3">
                   <div className="font-mono font-semibold text-foreground text-xs">
-                    {v.regNumber}
+                    {v.registrationNumber}
                   </div>
-                  <div className="text-[11px] text-muted-foreground font-mono">{v.id}</div>
                 </TableCell>
 
                 <TableCell>
-                  <Badge variant="outline" className="font-normal text-[11px] border-border bg-muted/20">
-                    {v.type}
+                  <Badge variant="outline" className="font-normal text-[11px] border-border bg-muted/20 capitalize">
+                    {v.type.replace(/_/g, " ")}
                   </Badge>
                 </TableCell>
 
-                <TableCell className="text-xs font-medium">
-                  {v.driver}
-                </TableCell>
-
                 <TableCell className="text-xs text-muted-foreground">
-                  {v.city}
+                  {hubsList.find((h: any) => h.id === v.hubId)?.name ?? "—"}
                 </TableCell>
 
                 <TableCell className="text-xs font-mono">
                   <div className="flex items-center gap-1.5">
                     <BatteryCharging className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>{v.battery}%</span>
+                    <span>{v.capacityKg} kg</span>
                   </div>
                 </TableCell>
+
+                <TableCell className="text-xs">{v.isElectric ? "Yes" : "No"}</TableCell>
 
                 <TableCell>
                   <div className="flex items-center gap-1.5">
-                    <span
-                      className={`h-2 w-2 rounded-full ${
-                        v.status === "On Duty"
-                          ? "bg-emerald-500"
-                          : v.status === "Charging"
-                          ? "bg-amber-500"
-                          : v.status === "Maintenance"
-                          ? "bg-red-500"
-                          : "bg-muted-foreground"
-                      }`}
-                    />
-                    <span className="font-medium text-xs">{v.status}</span>
+                    <span className={`h-2 w-2 rounded-full ${v.active ? "bg-emerald-500" : "bg-muted-foreground"}`} />
+                    <span className="font-medium text-xs">{v.active ? "Active" : "Inactive"}</span>
                   </div>
-                </TableCell>
-
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7">
-                        <MoreHorizontal className="h-3.5 w-3.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44 text-xs">
-                      <DropdownMenuLabel className="text-[11px] text-muted-foreground">
-                        {v.regNumber}
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleStatusChange(v.id, "On Duty")} className="gap-2 text-xs">
-                        <UserCheck className="h-3.5 w-3.5" /> Set On Duty
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleStatusChange(v.id, "Maintenance")} className="gap-2 text-xs">
-                        <Wrench className="h-3.5 w-3.5" /> Flag Maintenance
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
@@ -317,7 +253,7 @@ function AdminFleetPage() {
           <DialogHeader>
             <DialogTitle>Add Fleet Vehicle</DialogTitle>
             <DialogDescription>
-              Register a new delivery vehicle or EV bike into the fleet registry.
+              Register a new delivery vehicle into the fleet registry.
             </DialogDescription>
           </DialogHeader>
 
@@ -336,29 +272,41 @@ function AdminFleetPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Type</Label>
-                <Select value={newType} onValueChange={(val) => setNewType(val as VehicleItem["type"])}>
+                <Select value={newType} onValueChange={(val) => setNewType(val as typeof newType)}>
                   <SelectTrigger className="h-9 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="EV Cargo">EV Cargo</SelectItem>
-                    <SelectItem value="EV Van">EV Van</SelectItem>
-                    <SelectItem value="Medical Bike">Medical Bike</SelectItem>
-                    <SelectItem value="Mini Van">Mini Van</SelectItem>
-                    <SelectItem value="Bike">Bike</SelectItem>
-                    <SelectItem value="Line-Haul Truck">Line-Haul Truck</SelectItem>
+                    {VEHICLE_TYPES.map((t) => (
+                      <SelectItem key={t} value={t} className="capitalize">{t.replace(/_/g, " ")}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs">Operating City</Label>
+                <Label className="text-xs">Capacity (kg)</Label>
                 <Input
-                  value={newCity}
-                  onChange={(e) => setNewCity(e.target.value)}
+                  type="number"
+                  value={newCapacity}
+                  onChange={(e) => setNewCapacity(e.target.value)}
                   className="h-9 text-xs"
                 />
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Hub</Label>
+              <Select value={newHubId} onValueChange={setNewHubId}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder="Select hub" />
+                </SelectTrigger>
+                <SelectContent>
+                  {hubsList.map((h: any) => (
+                    <SelectItem key={h.id} value={h.id}>{h.name} ({h.code})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <DialogFooter className="pt-3">

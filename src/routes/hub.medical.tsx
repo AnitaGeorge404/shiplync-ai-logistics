@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { drivers } from "@/lib/mock-data";
+import { useShipments, useAgents, useQueryClient } from "@/lib/api-hooks";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -44,41 +44,39 @@ export const Route = createFileRoute("/hub/medical")({
   component: HubMedicalPage,
 });
 
-export interface MedicalParcel {
-  id: string;
-  tracking: string;
-  content: string;
-  tempLogged: string;
-  targetSla: string;
-  rider: string;
-  status: "Priority Locked" | "In Transit" | "Delivered";
+function useMedicalQueue() {
+  const { data: hubShipments = [] } = useShipments("hub");
+  return hubShipments.filter((s: any) => s.packageType === "medical" && s.status !== "delivered" && s.status !== "cancelled");
 }
 
-const INITIAL_MEDICAL: MedicalParcel[] = [
-  { id: "M-101", tracking: "SLX-77421-IN", content: "Cold-Chain Vaccines (2-8°C)", tempLogged: "3.4 °C Verified", targetSla: "1:30 PM (in 42m)", rider: "Anita Sharma", status: "Priority Locked" },
-  { id: "M-102", tracking: "SLX-77432-IN", content: "Emergency Surgical Supplies", tempLogged: "Ambient Verified", targetSla: "2:00 PM (in 1h 12m)", rider: "Anita Sharma", status: "Priority Locked" },
-  { id: "M-103", tracking: "SLX-77440-IN", content: "Insulin Consignment", tempLogged: "4.1 °C Verified", targetSla: "2:15 PM (in 1h 27m)", rider: "Unassigned", status: "Priority Locked" },
-];
-
 function HubMedicalPage() {
-  const [medicalList, setMedicalList] = useState<MedicalParcel[]>(INITIAL_MEDICAL);
+  const medicalList = useMedicalQueue();
+  const { data: agents = [] } = useAgents();
+  const queryClient = useQueryClient();
   const [isAssignOpen, setIsAssignOpen] = useState(false);
-  const [selectedTracking, setSelectedTracking] = useState<string | null>(null);
-  const [selectedRider, setSelectedRider] = useState(drivers[1]?.name || "Anita Sharma");
+  const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
+  const [selectedRiderId, setSelectedRiderId] = useState<string>("");
 
   const handleVerifyTemp = (tracking: string) => {
-    toast.success(`Cold-chain temperature re-verified for ${tracking}: 3.2°C (Optimal Range)`);
+    toast.info(`No cold-chain temperature sensor is integrated yet for ${tracking} — this action is illustrative.`);
   };
 
-  const handleAssignRiderSubmit = (e: React.FormEvent) => {
+  const handleAssignRiderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTracking) return;
+    if (!selectedShipmentId || !selectedRiderId) return;
 
-    setMedicalList((prev) =>
-      prev.map((m) => (m.tracking === selectedTracking ? { ...m, rider: selectedRider } : m))
-    );
+    const res = await fetch(`/api/shipments/${selectedShipmentId}/assign`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ agentId: selectedRiderId }),
+    });
+    if (!res.ok) {
+      toast.error("Could not assign rider");
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ["shipments", "hub"] });
     setIsAssignOpen(false);
-    toast.success(`Assigned dedicated rider ${selectedRider} to medical consignment ${selectedTracking}`);
+    toast.success("Assigned dedicated rider to medical consignment");
   };
 
   return (
@@ -121,21 +119,21 @@ function HubMedicalPage() {
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Cold-Chain Temp Log <Thermometer className="h-4 w-4 text-foreground" />
+            Unassigned <Thermometer className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">100% OK</div>
+          <div className="text-2xl font-semibold font-display mt-2">{medicalList.filter((m: any) => !m.assignedAgentId).length}</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Custody Verified <ShieldCheck className="h-4 w-4 text-foreground" />
+            Assigned <ShieldCheck className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">Verified</div>
+          <div className="text-2xl font-semibold font-display mt-2">{medicalList.filter((m: any) => m.assignedAgentId).length}</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Dedicated Lane Rider <UserCheck className="h-4 w-4 text-foreground" />
+            Registered Riders <UserCheck className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">Anita Sharma</div>
+          <div className="text-2xl font-semibold font-display mt-2">{agents.length}</div>
         </div>
       </div>
 
@@ -154,34 +152,41 @@ function HubMedicalPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {medicalList.map((m) => (
+            {medicalList.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-8">
+                  No active medical shipments at this hub.
+                </TableCell>
+              </TableRow>
+            )}
+            {medicalList.map((m: any) => (
               <TableRow key={m.id} className="text-xs hover:bg-muted/30">
                 <TableCell className="py-3.5 font-mono font-semibold text-foreground text-xs">
-                  {m.tracking}
+                  {m.trackingId}
                 </TableCell>
 
                 <TableCell className="font-medium text-foreground text-xs">
-                  {m.content}
+                  {m.weightKg} kg to {m.receiverCity}
                 </TableCell>
 
                 <TableCell className="text-xs font-mono text-muted-foreground">
                   <div className="flex items-center gap-1.5">
                     <Thermometer className="h-3.5 w-3.5 text-foreground" />
-                    <span>{m.tempLogged}</span>
+                    <span>Not integrated</span>
                   </div>
                 </TableCell>
 
                 <TableCell className="text-xs font-medium">
-                  {m.targetSla}
+                  {m.estimatedDeliveryAt ? new Date(m.estimatedDeliveryAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "TBD"}
                 </TableCell>
 
                 <TableCell className="text-xs font-medium">
-                  {m.rider}
+                  {m.assignedAgentId ? agents.find((a: any) => a.id === m.assignedAgentId)?.name ?? "Assigned" : "Unassigned"}
                 </TableCell>
 
                 <TableCell>
-                  <Badge variant="outline" className="font-normal text-[11px] bg-red-50 dark:bg-red-950/40 text-red-600 border-red-200 dark:border-red-800">
-                    {m.status}
+                  <Badge variant="outline" className="font-normal text-[11px] bg-red-50 dark:bg-red-950/40 text-red-600 border-red-200 dark:border-red-800 capitalize">
+                    {m.status.replace(/_/g, " ")}
                   </Badge>
                 </TableCell>
 
@@ -190,16 +195,17 @@ function HubMedicalPage() {
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs"
-                    onClick={() => handleVerifyTemp(m.tracking)}
+                    onClick={() => handleVerifyTemp(m.trackingId)}
                   >
                     Verify Temp
                   </Button>
-                  {m.rider === "Unassigned" && (
+                  {!m.assignedAgentId && (
                     <Button
                       size="sm"
                       className="h-7 text-xs"
                       onClick={() => {
-                        setSelectedTracking(m.tracking);
+                        setSelectedShipmentId(m.id);
+                        setSelectedRiderId(agents[0]?.id ?? "");
                         setIsAssignOpen(true);
                       }}
                     >
@@ -219,21 +225,21 @@ function HubMedicalPage() {
           <DialogHeader>
             <DialogTitle>Assign Dedicated Medical Rider</DialogTitle>
             <DialogDescription>
-              Assign a dedicated rider for medical consignment {selectedTracking}.
+              Assign a dedicated rider for this medical consignment.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleAssignRiderSubmit} className="space-y-4 py-2 text-xs">
             <div className="space-y-1">
               <Label className="text-xs">Dedicated Rider</Label>
-              <Select value={selectedRider} onValueChange={setSelectedRider}>
+              <Select value={selectedRiderId} onValueChange={setSelectedRiderId}>
                 <SelectTrigger className="h-9 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {drivers.map((d) => (
-                    <SelectItem key={d.id} value={d.name}>
-                      {d.name} ({d.vehicle})
+                  {agents.map((d: any) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name} ({d.phone})
                     </SelectItem>
                   ))}
                 </SelectContent>

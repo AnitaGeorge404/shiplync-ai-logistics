@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { hubs as initialHubs } from "@/lib/mock-data";
+import { useHubs, useQueryClient } from "@/lib/api-hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,78 +57,66 @@ export const Route = createFileRoute("/admin/hubs")({
   component: AdminHubsPage,
 });
 
-export interface HubItem {
-  code: string;
-  city: string;
-  load: number;
-  capacity: number;
-  staff: number;
-  incoming: number;
-  outgoing: number;
-  status: "healthy" | "congested" | "warning";
-}
-
 function AdminHubsPage() {
-  const [hubList, setHubList] = useState<HubItem[]>(initialHubs as HubItem[]);
+  const { data: hubList = [] } = useHubs();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
   const [isAddHubOpen, setIsAddHubOpen] = useState(false);
 
   // New Hub form state
   const [newCode, setNewCode] = useState("");
+  const [newName, setNewName] = useState("");
   const [newCity, setNewCity] = useState("");
+  const [newState, setNewState] = useState("");
+  const [newPincode, setNewPincode] = useState("");
+  const [newAddress, setNewAddress] = useState("");
   const [newCapacity, setNewCapacity] = useState("4000");
-  const [newStaff, setNewStaff] = useState("30");
 
   const filteredHubs = useMemo(() => {
-    return hubList.filter((h) => {
-      const matchesSearch =
+    return hubList.filter(
+      (h: any) =>
         h.code.toLowerCase().includes(search.toLowerCase()) ||
-        h.city.toLowerCase().includes(search.toLowerCase());
-
-      const matchesStatus = statusFilter === "ALL" || h.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [hubList, search, statusFilter]);
+        h.city.toLowerCase().includes(search.toLowerCase()),
+    );
+  }, [hubList, search]);
 
   const stats = useMemo(() => {
     const totalHubs = hubList.length;
-    const avgLoad = Math.round(
-      hubList.reduce((acc, h) => acc + h.load, 0) / (totalHubs || 1)
-    );
-    const totalStaff = hubList.reduce((acc, h) => acc + h.staff, 0);
-    const totalParcels = hubList.reduce((acc, h) => acc + h.incoming + h.outgoing, 0);
-
-    return { totalHubs, avgLoad, totalStaff, totalParcels };
+    const totalCapacity = hubList.reduce((acc: number, h: any) => acc + h.capacity, 0);
+    return { totalHubs, totalCapacity };
   }, [hubList]);
 
-  const handleAddHub = (e: React.FormEvent) => {
+  const handleAddHub = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCode || !newCity) return;
-
-    const newHub: HubItem = {
-      code: newCode.toUpperCase(),
-      city: newCity,
-      load: 35,
-      capacity: parseInt(newCapacity) || 4000,
-      staff: parseInt(newStaff) || 30,
-      incoming: 120,
-      outgoing: 180,
-      status: "healthy",
-    };
-
-    setHubList([...hubList, newHub]);
+    if (!newCode || !newCity || !newName || !newState || !newPincode || !newAddress) {
+      toast.error("All fields are required");
+      return;
+    }
+    const res = await fetch("/api/hubs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: newName,
+        code: newCode.toUpperCase(),
+        addressLine: newAddress,
+        city: newCity,
+        state: newState,
+        pincode: newPincode,
+        lat: 0,
+        lng: 0,
+        capacity: parseInt(newCapacity) || 4000,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Could not create hub");
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ["hubs"] });
     setIsAddHubOpen(false);
     setNewCode("");
     setNewCity("");
-    toast.success(`Sorting hub ${newHub.code} created`);
-  };
-
-  const handleRebalance = (code: string) => {
-    setHubList((prev) =>
-      prev.map((h) => (h.code === code ? { ...h, load: Math.max(40, h.load - 15), status: "healthy" } : h))
-    );
-    toast.success(`Load rebalanced for ${code}. Rerouted 15% parcels.`);
+    toast.success(`Sorting hub ${newCode.toUpperCase()} created`);
   };
 
   return (
@@ -173,23 +161,21 @@ function AdminHubsPage() {
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Avg Load Factor <SlidersHorizontal className="h-4 w-4 text-foreground" />
+            Total Capacity <SlidersHorizontal className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats.avgLoad}%</div>
+          <div className="text-2xl font-semibold font-display mt-2">{stats.totalCapacity.toLocaleString()}</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Total Staff <Users className="h-4 w-4 text-foreground" />
+            Network <Users className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats.totalStaff}</div>
+          <div className="text-2xl font-semibold font-display mt-2">Live</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Daily Throughput <PackageCheck className="h-4 w-4 text-foreground" />
+            Source <PackageCheck className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">
-            {stats.totalParcels.toLocaleString()}
-          </div>
+          <div className="text-2xl font-semibold font-display mt-2">Database</div>
         </div>
       </div>
 
@@ -204,18 +190,6 @@ function AdminHubsPage() {
             className="pl-8 h-9 text-xs bg-background"
           />
         </div>
-
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[140px] h-9 text-xs bg-background">
-            <SelectValue placeholder="Status Filter" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Hubs</SelectItem>
-            <SelectItem value="healthy">Healthy</SelectItem>
-            <SelectItem value="congested">Congested</SelectItem>
-            <SelectItem value="warning">Warning</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       {/* Table */}
@@ -224,77 +198,33 @@ function AdminHubsPage() {
           <TableHeader className="bg-muted/40">
             <TableRow className="hover:bg-transparent">
               <TableHead className="text-xs font-medium">Hub Code & Location</TableHead>
-              <TableHead className="text-xs font-medium">Current Load Capacity</TableHead>
-              <TableHead className="text-xs font-medium">Staffing</TableHead>
-              <TableHead className="text-xs font-medium">Incoming / Outgoing</TableHead>
-              <TableHead className="text-xs font-medium">Status</TableHead>
-              <TableHead className="w-12 text-right text-xs font-medium"></TableHead>
+              <TableHead className="text-xs font-medium">Address</TableHead>
+              <TableHead className="text-xs font-medium">Capacity</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredHubs.map((h) => (
-              <TableRow key={h.code} className="text-xs hover:bg-muted/30">
+            {filteredHubs.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={3} className="text-center text-xs text-muted-foreground py-8">
+                  No hubs registered yet.
+                </TableCell>
+              </TableRow>
+            )}
+            {filteredHubs.map((h: any) => (
+              <TableRow key={h.id} className="text-xs hover:bg-muted/30">
                 <TableCell className="py-3.5">
                   <div className="font-mono font-semibold text-foreground text-xs">
                     {h.code}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{h.city}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{h.name} · {h.city}</div>
                 </TableCell>
 
-                <TableCell className="w-48">
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px]">
-                      <span className="font-mono text-muted-foreground">{h.load}%</span>
-                      <span className="text-muted-foreground">{h.capacity.toLocaleString()} max</span>
-                    </div>
-                    <Progress value={h.load} className="h-1.5" />
-                  </div>
+                <TableCell className="text-xs text-muted-foreground">
+                  {h.addressLine}, {h.state} {h.pincode}
                 </TableCell>
 
                 <TableCell className="text-xs font-medium">
-                  {h.staff} operators
-                </TableCell>
-
-                <TableCell className="text-xs">
-                  <span className="text-foreground font-medium">+{h.incoming}</span> in ·{" "}
-                  <span className="text-muted-foreground">-{h.outgoing} out</span>
-                </TableCell>
-
-                <TableCell>
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`h-2 w-2 rounded-full ${
-                        h.status === "healthy"
-                          ? "bg-emerald-500"
-                          : h.status === "congested"
-                          ? "bg-amber-500"
-                          : "bg-red-500"
-                      }`}
-                    />
-                    <span className="capitalize font-medium text-xs">{h.status}</span>
-                  </div>
-                </TableCell>
-
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7">
-                        <MoreHorizontal className="h-3.5 w-3.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44 text-xs">
-                      <DropdownMenuLabel className="text-[11px] text-muted-foreground">
-                        {h.code}
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleRebalance(h.code)} className="gap-2 text-xs">
-                        <ArrowRightLeft className="h-3.5 w-3.5" /> Rebalance Load
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => toast.info(`Editing settings for ${h.code}`)} className="gap-2 text-xs">
-                        <Settings className="h-3.5 w-3.5" /> Hub Settings
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {h.capacity.toLocaleString()} / day
                 </TableCell>
               </TableRow>
             ))}
@@ -313,48 +243,45 @@ function AdminHubsPage() {
           </DialogHeader>
 
           <form onSubmit={handleAddHub} className="space-y-4 py-2 text-xs">
-            <div className="space-y-1">
-              <Label className="text-xs">Hub Code</Label>
-              <Input
-                placeholder="e.g. PNQ-Main"
-                value={newCode}
-                onChange={(e) => setNewCode(e.target.value)}
-                required
-                className="h-9 text-xs font-mono"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">City / Region</Label>
-              <Input
-                placeholder="e.g. Pune"
-                value={newCity}
-                onChange={(e) => setNewCity(e.target.value)}
-                required
-                className="h-9 text-xs"
-              />
-            </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Daily Capacity</Label>
-                <Input
-                  type="number"
-                  value={newCapacity}
-                  onChange={(e) => setNewCapacity(e.target.value)}
-                  className="h-9 text-xs"
-                />
+                <Label className="text-xs">Hub Code</Label>
+                <Input placeholder="e.g. PNQ-MAIN" value={newCode} onChange={(e) => setNewCode(e.target.value)} required className="h-9 text-xs font-mono" />
               </div>
-
               <div className="space-y-1">
-                <Label className="text-xs">Assigned Staff</Label>
-                <Input
-                  type="number"
-                  value={newStaff}
-                  onChange={(e) => setNewStaff(e.target.value)}
-                  className="h-9 text-xs"
-                />
+                <Label className="text-xs">Hub Name</Label>
+                <Input placeholder="e.g. Pune Main Hub" value={newName} onChange={(e) => setNewName(e.target.value)} required className="h-9 text-xs" />
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Address</Label>
+              <Input placeholder="Street address" value={newAddress} onChange={(e) => setNewAddress(e.target.value)} required className="h-9 text-xs" />
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">City</Label>
+                <Input placeholder="Pune" value={newCity} onChange={(e) => setNewCity(e.target.value)} required className="h-9 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">State</Label>
+                <Input placeholder="MH" value={newState} onChange={(e) => setNewState(e.target.value)} required className="h-9 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Pincode</Label>
+                <Input placeholder="411001" value={newPincode} onChange={(e) => setNewPincode(e.target.value)} required className="h-9 text-xs" />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Daily Capacity</Label>
+              <Input
+                type="number"
+                value={newCapacity}
+                onChange={(e) => setNewCapacity(e.target.value)}
+                className="h-9 text-xs"
+              />
             </div>
 
             <DialogFooter className="pt-3">
