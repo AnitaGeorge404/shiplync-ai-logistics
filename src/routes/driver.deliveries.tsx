@@ -13,18 +13,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import {
-  ListChecks,
-  Search,
-  CheckCircle2,
-  Clock,
-  Phone,
-  Download,
-  IndianRupee,
-  ShieldCheck,
-  MoreHorizontal,
-  Truck,
-} from "lucide-react";
+import { ListChecks, Search, CheckCircle2, Clock, IndianRupee } from "lucide-react";
 import { toast } from "sonner";
 
 type RealAssignedShipment = {
@@ -34,6 +23,9 @@ type RealAssignedShipment = {
   receiverAddressLine: string;
   receiverCity: string;
   status: string;
+  cost: number;
+  estimatedDeliveryAt: string | null;
+  deliveredAt: string | null;
 };
 
 function useAssignedShipments() {
@@ -62,10 +54,22 @@ const NEXT_STATUS: Record<string, { label: string; status: string } | null> = {
   cancelled: null,
 };
 
-function LiveAssignmentsPanel() {
+export const Route = createFileRoute("/driver/deliveries")({
+  head: () => ({
+    meta: [
+      { title: "Deliveries — Delivery Partner" },
+      { name: "description", content: "All assigned deliveries, completed drop-offs, and proof of delivery." },
+    ],
+  }),
+  component: DriverDeliveriesPage,
+});
+
+function DriverDeliveriesPage() {
   const { data: shipments = [], isLoading } = useAssignedShipments();
   const queryClient = useQueryClient();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
 
   async function advanceStatus(id: string, status: string) {
     setBusyId(id);
@@ -111,159 +115,46 @@ function LiveAssignmentsPanel() {
     }
   }
 
-  if (isLoading || shipments.length === 0) return null;
-
-  return (
-    <div className="border rounded-lg bg-card p-4 space-y-3">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <Truck className="h-4 w-4" /> Live assignments (real, from database)
-      </div>
-      <div className="space-y-2">
-        {shipments.map((s) => {
-          const next = NEXT_STATUS[s.status];
-          return (
-            <div
-              key={s.id}
-              className="flex items-center justify-between gap-3 border rounded-md p-3 text-xs bg-muted/20"
-            >
-              <div>
-                <div className="font-mono font-semibold">{s.trackingId}</div>
-                <div className="text-muted-foreground">
-                  {s.receiverName} · {s.receiverCity}
-                </div>
-                <Badge variant="outline" className="mt-1 text-[10px] capitalize">
-                  {s.status.replace(/_/g, " ")}
-                </Badge>
-              </div>
-              <div className="flex gap-2">
-                {next && (
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs"
-                    disabled={busyId === s.id}
-                    onClick={() => advanceStatus(s.id, next.status)}
-                  >
-                    {next.label}
-                  </Button>
-                )}
-                {s.status === "out_for_delivery" && (
-                  <>
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs"
-                      disabled={busyId === s.id}
-                      onClick={() => recordAttempt(s.id, "delivered")}
-                    >
-                      Delivered
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                      disabled={busyId === s.id}
-                      onClick={() => recordAttempt(s.id, "receiver_unavailable")}
-                    >
-                      Failed attempt
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-export const Route = createFileRoute("/driver/deliveries")({
-  head: () => ({
-    meta: [
-      { title: "Deliveries — Delivery Partner" },
-      { name: "description", content: "All assigned deliveries, completed drop-offs, COD payments, and proof of delivery." },
-    ],
-  }),
-  component: DriverDeliveriesPage,
-});
-
-export interface DeliveryRecord {
-  id: string;
-  tracking: string;
-  recipient: string;
-  address: string;
-  cod: number;
-  status: "Completed" | "Pending" | "Attempted";
-  verifiedMethod: "OTP Verified" | "Photo Signature" | "Pending";
-  timestamp: string;
-}
-
-const INITIAL_DELIVERIES: DeliveryRecord[] = [
-  { id: "D-101", tracking: "SLX-77420-IN", recipient: "Aditi Kapoor", address: "Koramangala 4th Block", cod: 0, status: "Completed", verifiedMethod: "OTP Verified", timestamp: "11:20 AM" },
-  { id: "D-102", tracking: "SLX-77421-IN", recipient: "Sunita Rao", address: "HSR Layout Sector 1", cod: 480, status: "Pending", verifiedMethod: "Pending", timestamp: "Est 11:45 AM" },
-  { id: "D-103", tracking: "SLX-77422-IN", recipient: "Kabir Mehta", address: "Indiranagar 100ft Rd", cod: 0, status: "Pending", verifiedMethod: "Pending", timestamp: "Est 12:10 PM" },
-  { id: "D-104", tracking: "SLX-77423-IN", recipient: "TechCorp Logistics", address: "Whitefield Tech Park", cod: 1240, status: "Pending", verifiedMethod: "Pending", timestamp: "Est 12:35 PM" },
-  { id: "D-105", tracking: "SLX-77424-IN", recipient: "Vikram S.", address: "Domlur Flyover Rd", cod: 0, status: "Pending", verifiedMethod: "Pending", timestamp: "Est 01:05 PM" },
-  { id: "D-106", tracking: "SLX-77425-IN", recipient: "Deepa Patel", address: "Sarjapur Main Rd", cod: 340, status: "Pending", verifiedMethod: "Pending", timestamp: "Est 01:30 PM" },
-];
-
-function DriverDeliveriesPage() {
-  const [deliveries, setDeliveries] = useState<DeliveryRecord[]>(INITIAL_DELIVERIES);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-
-  const filteredDeliveries = useMemo(() => {
-    return deliveries.filter((d) => {
+  const filtered = useMemo(() => {
+    return shipments.filter((s) => {
       const matchesSearch =
-        d.tracking.toLowerCase().includes(search.toLowerCase()) ||
-        d.recipient.toLowerCase().includes(search.toLowerCase()) ||
-        d.address.toLowerCase().includes(search.toLowerCase());
-
-      const matchesStatus = statusFilter === "ALL" || d.status === statusFilter;
+        s.trackingId.toLowerCase().includes(search.toLowerCase()) ||
+        s.receiverName.toLowerCase().includes(search.toLowerCase()) ||
+        s.receiverAddressLine.toLowerCase().includes(search.toLowerCase());
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        (statusFilter === "Completed" && s.status === "delivered") ||
+        (statusFilter === "Pending" && s.status !== "delivered" && s.status !== "delivery_attempted") ||
+        (statusFilter === "Attempted" && s.status === "delivery_attempted");
       return matchesSearch && matchesStatus;
     });
-  }, [deliveries, search, statusFilter]);
+  }, [shipments, search, statusFilter]);
 
   const stats = useMemo(() => {
-    const total = deliveries.length;
-    const completed = deliveries.filter((d) => d.status === "Completed").length;
-    const pending = deliveries.filter((d) => d.status === "Pending").length;
-    const codTotal = deliveries
-      .filter((d) => d.status === "Completed")
-      .reduce((acc, d) => acc + d.cod, 0);
-
-    return { total, completed, pending, codTotal };
-  }, [deliveries]);
+    const total = shipments.length;
+    const completed = shipments.filter((s) => s.status === "delivered").length;
+    const pending = shipments.filter((s) => s.status !== "delivered").length;
+    const revenue = shipments.filter((s) => s.status === "delivered").reduce((acc, s) => acc + s.cost, 0);
+    return { total, completed, pending, revenue };
+  }, [shipments]);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-5">
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
             Deliveries Summary
           </h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Complete list of assigned parcel drop-offs, COD cash collections, and OTP verifications.
+            Real assigned shipments from the database — advance status, mark delivered, or log a failed attempt.
           </p>
         </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 text-xs gap-1.5"
-          onClick={() => toast.success("Exported deliveries summary")}
-        >
-          <Download className="h-3.5 w-3.5" /> Export Log
-        </Button>
       </div>
 
-      <LiveAssignmentsPanel />
-
-      {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Total Shift Drops <ListChecks className="h-4 w-4 text-foreground" />
+            Total Assigned <ListChecks className="h-4 w-4 text-foreground" />
           </div>
           <div className="text-2xl font-semibold font-display mt-2">{stats.total}</div>
         </div>
@@ -281,13 +172,12 @@ function DriverDeliveriesPage() {
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            COD Cash Collected <IndianRupee className="h-4 w-4 text-foreground" />
+            Delivered Value <IndianRupee className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">₹{stats.codTotal}</div>
+          <div className="text-2xl font-semibold font-display mt-2">₹{stats.revenue.toLocaleString()}</div>
         </div>
       </div>
 
-      {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 flex-wrap border-b pb-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -312,57 +202,102 @@ function DriverDeliveriesPage() {
         </Select>
       </div>
 
-      {/* Table */}
       <div className="border rounded-lg bg-card overflow-hidden shadow-sm">
         <Table>
           <TableHeader className="bg-muted/40">
             <TableRow className="hover:bg-transparent">
               <TableHead className="text-xs font-medium">Tracking & ID</TableHead>
               <TableHead className="text-xs font-medium">Recipient & Location</TableHead>
-              <TableHead className="text-xs font-medium">COD Amount</TableHead>
-              <TableHead className="text-xs font-medium">Verification</TableHead>
+              <TableHead className="text-xs font-medium">Value</TableHead>
               <TableHead className="text-xs font-medium">Status</TableHead>
-              <TableHead className="text-xs font-medium">Time</TableHead>
+              <TableHead className="text-xs font-medium">ETA / Delivered</TableHead>
+              <TableHead className="text-right text-xs font-medium">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredDeliveries.map((d) => (
-              <TableRow key={d.id} className="text-xs hover:bg-muted/30">
-                <TableCell className="py-3 font-mono font-semibold text-foreground text-xs">
-                  {d.tracking}
-                </TableCell>
-
-                <TableCell>
-                  <div className="font-medium text-foreground text-xs">{d.recipient}</div>
-                  <div className="text-[11px] text-muted-foreground">{d.address}</div>
-                </TableCell>
-
-                <TableCell className="font-mono text-xs font-medium">
-                  {d.cod > 0 ? `₹${d.cod}` : "Prepaid"}
-                </TableCell>
-
-                <TableCell>
-                  <Badge variant="outline" className="font-normal text-[11px] border-border bg-muted/20">
-                    {d.verifiedMethod}
-                  </Badge>
-                </TableCell>
-
-                <TableCell>
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`h-2 w-2 rounded-full ${
-                        d.status === "Completed" ? "bg-emerald-500" : "bg-amber-500"
-                      }`}
-                    />
-                    <span className="font-medium text-xs">{d.status}</span>
-                  </div>
-                </TableCell>
-
-                <TableCell className="text-xs text-muted-foreground">
-                  {d.timestamp}
+            {!isLoading && filtered.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-8">
+                  No assigned shipments match your filters.
                 </TableCell>
               </TableRow>
-            ))}
+            )}
+            {filtered.map((s) => {
+              const next = NEXT_STATUS[s.status];
+              return (
+                <TableRow key={s.id} className="text-xs hover:bg-muted/30">
+                  <TableCell className="py-3 font-mono font-semibold text-foreground text-xs">
+                    {s.trackingId}
+                  </TableCell>
+
+                  <TableCell>
+                    <div className="font-medium text-foreground text-xs">{s.receiverName}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {s.receiverAddressLine}, {s.receiverCity}
+                    </div>
+                  </TableCell>
+
+                  <TableCell className="font-mono text-xs font-medium">₹{s.cost}</TableCell>
+
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          s.status === "delivered" ? "bg-emerald-500" : "bg-amber-500"
+                        }`}
+                      />
+                      <Badge variant="outline" className="font-normal text-[11px] capitalize">
+                        {s.status.replace(/_/g, " ")}
+                      </Badge>
+                    </div>
+                  </TableCell>
+
+                  <TableCell className="text-xs text-muted-foreground">
+                    {s.status === "delivered" && s.deliveredAt
+                      ? new Date(s.deliveredAt).toLocaleString()
+                      : s.estimatedDeliveryAt
+                        ? new Date(s.estimatedDeliveryAt).toLocaleString()
+                        : "TBD"}
+                  </TableCell>
+
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1.5">
+                      {next && (
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={busyId === s.id}
+                          onClick={() => advanceStatus(s.id, next.status)}
+                        >
+                          {next.label}
+                        </Button>
+                      )}
+                      {s.status === "out_for_delivery" && (
+                        <>
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs"
+                            disabled={busyId === s.id}
+                            onClick={() => recordAttempt(s.id, "delivered")}
+                          >
+                            Delivered
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            disabled={busyId === s.id}
+                            onClick={() => recordAttempt(s.id, "receiver_unavailable")}
+                          >
+                            Failed attempt
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
