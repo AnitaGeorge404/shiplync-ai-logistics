@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useAuth } from "@/context/AuthContext";
 import { Loader2 } from "lucide-react";
@@ -17,13 +17,19 @@ export function RequireAuth({ roles, children }: { roles?: string[]; children: R
   const { user, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // Captured once, at the path the visitor actually wanted — pathname itself
+  // is NOT a safe effect dependency here: navigating to /login changes it,
+  // which would re-fire this effect and overwrite the saved redirect with
+  // "/login" before the user ever logs in.
+  const intendedPath = useRef(pathname);
 
   const wrongRole = !isLoading && isAuthenticated && roles && user && !roles.includes(user.role ?? "");
 
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) {
-      navigate({ to: "/login", search: { redirect: pathname } as any });
+      if (pathname.startsWith("/login")) return;
+      navigate({ to: "/login", search: { redirect: intendedPath.current } as any });
       return;
     }
     if (wrongRole) {

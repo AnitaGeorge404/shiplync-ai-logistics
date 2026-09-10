@@ -1,29 +1,22 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { shipments, timeline, type Shipment } from "@/lib/mock-data";
+import { useState, useMemo, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useShipments, toBadgeStatus, toProgress } from "@/lib/api-hooks";
 import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { RouteMap } from "@/components/shiplync/RouteMap";
 import { Timeline } from "@/components/shiplync/Timeline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Search,
   MapPin,
-  Sparkles,
   ShieldCheck,
-  Phone,
-  MessageSquare,
   Share2,
-  BellRing,
   Truck,
   ArrowRight,
   CheckCircle2,
-  Clock,
   Navigation,
-  Check,
-  SlidersHorizontal,
   Package,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -32,468 +25,267 @@ export const Route = createFileRoute("/customer/track/")({
   head: () => ({
     meta: [
       { title: "Track Shipment — ShipLync AI Logistics" },
-      { name: "description", content: "Real-time parcel tracking with live map updates, driver location, and AI ETAs." },
+      { name: "description", content: "Real-time parcel tracking with live map updates and status timeline." },
     ],
   }),
   component: TrackIndexPage,
 });
 
+function useTrackedShipment(trackingId: string | null) {
+  return useQuery({
+    queryKey: ["track", trackingId],
+    enabled: !!trackingId,
+    queryFn: async () => {
+      const res = await fetch(`/api/shipments/track/${encodeURIComponent(trackingId!)}`);
+      if (!res.ok) return null;
+      return res.json() as Promise<{ shipment: any; events: any[] }>;
+    },
+  });
+}
+
 function TrackIndexPage() {
   const navigate = useNavigate();
+  const { data: myShipments = [] } = useShipments("mine");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedShipment, setSelectedShipment] = useState<Shipment>(shipments[0]);
-  const [activeTab, setActiveTab] = useState<"tracking" | "phone">("tracking");
-  const [instructions, setInstructions] = useState<{ [key: string]: boolean }>({
-    doorstep: false,
-    call: true,
-    gate: false,
-  });
+  const [selectedTrackingId, setSelectedTrackingId] = useState<string | null>(null);
 
-  const handleSearch = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (!selectedTrackingId && myShipments.length > 0) {
+      setSelectedTrackingId(myShipments[0].trackingId);
+    }
+  }, [myShipments, selectedTrackingId]);
+
+  const { data: tracked, isLoading: trackLoading } = useTrackedShipment(selectedTrackingId);
+
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchQuery.trim()) return;
-
-    const match = shipments.find(
-      (s) =>
-        s.tracking.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
-        s.id.toLowerCase().includes(searchQuery.trim().toLowerCase())
-    );
-
-    if (match) {
-      setSelectedShipment(match);
-      toast.success(`Found shipment ${match.tracking}`);
+    const q = searchQuery.trim();
+    if (!q) return;
+    const res = await fetch(`/api/shipments/track/${encodeURIComponent(q)}`);
+    if (res.ok) {
+      setSelectedTrackingId(q);
+      toast.success(`Found shipment ${q}`);
     } else {
-      toast.error("No shipment found matching that ID. Showing demo parcel.");
+      toast.error("No shipment found with that tracking ID.");
     }
   };
 
-  const selectParcel = (s: Shipment) => {
-    setSelectedShipment(s);
-    setSearchQuery(s.tracking);
-  };
+  const events = useMemo(() => {
+    if (!tracked?.events) return [];
+    return tracked.events.map((e: any) => ({
+      key: e.id,
+      label: e.status.replace(/_/g, " "),
+      time: new Date(e.createdAt).toLocaleString(),
+      location: e.location,
+      note: e.note,
+      done: true,
+    }));
+  }, [tracked]);
 
-  const toggleInstruction = (key: string) => {
-    setInstructions((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
-      toast.success(
-        next[key] ? "Delivery instruction updated!" : "Instruction removed."
-      );
-      return next;
-    });
-  };
-
-  const events = timeline(selectedShipment);
+  const s = tracked?.shipment;
 
   return (
     <div className="space-y-8">
-      {/* Header Banner */}
       <div>
-        <div className="text-xs uppercase tracking-widest text-muted-foreground">
-          Live Tracking Hub
-        </div>
-        <h1 className="font-display text-3xl font-semibold mt-1">
-          Track Your Deliveries
-        </h1>
+        <div className="text-xs uppercase tracking-widest text-muted-foreground">Live Tracking Hub</div>
+        <h1 className="font-display text-3xl font-semibold mt-1">Track Your Deliveries</h1>
         <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-          Real-time GPS coordinates, AI-calculated ETA, hub checkpoints, and direct courier communication.
+          Real shipment status and event history, pulled live from the database.
         </p>
       </div>
 
-      {/* Search Bar & Quick Chips */}
       <div className="card-elevated p-6 space-y-4 bg-card">
-        <Tabs
-          value={activeTab}
-          onValueChange={(v) => setActiveTab(v as typeof activeTab)}
-          className="w-full"
-        >
-          <TabsList className="grid grid-cols-2 max-w-xs mb-4">
-            <TabsTrigger value="tracking" className="text-xs">
-              Tracking ID / Code
-            </TabsTrigger>
-            <TabsTrigger value="phone" className="text-xs">
-              Mobile Number
-            </TabsTrigger>
-          </TabsList>
+        <form onSubmit={handleSearch} className="flex gap-2 max-w-2xl">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Enter Tracking ID (e.g. SLXA1B2C3D4)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 h-11 bg-background font-mono text-sm"
+            />
+          </div>
+          <Button type="submit" className="h-11 px-6 gap-2">
+            Track Parcel <ArrowRight className="h-4 w-4" />
+          </Button>
+        </form>
 
-          <TabsContent value="tracking">
-            <form onSubmit={handleSearch} className="flex gap-2 max-w-2xl">
-              <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Enter Tracking ID (e.g. SLX-77420-IN or SL-8842013)"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-11 bg-background font-mono text-sm"
-                />
-              </div>
-              <Button type="submit" className="h-11 px-6 gap-2">
-                Track Parcel <ArrowRight className="h-4 w-4" />
-              </Button>
-            </form>
-          </TabsContent>
-
-          <TabsContent value="phone">
-            <form onSubmit={handleSearch} className="flex gap-2 max-w-2xl">
-              <div className="relative flex-1">
-                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Enter 10-digit mobile number (+91 98765 43210)"
-                  defaultValue="+91 98765 43210"
-                  className="pl-10 h-11 bg-background text-sm"
-                />
-              </div>
-              <Button type="submit" className="h-11 px-6 gap-2">
-                Find Shipments <ArrowRight className="h-4 w-4" />
-              </Button>
-            </form>
-          </TabsContent>
-        </Tabs>
-
-        {/* Quick Suggestion Chips */}
-        <div className="flex items-center gap-2 flex-wrap text-xs pt-1">
-          <span className="text-muted-foreground font-medium">Quick select:</span>
-          {shipments.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => selectParcel(s)}
-              className={`px-3 py-1 rounded-full border text-xs font-mono transition-all ${
-                selectedShipment.id === s.id
-                  ? "bg-primary text-primary-foreground border-primary font-semibold shadow-sm"
-                  : "bg-background hover:bg-muted text-muted-foreground"
-              }`}
-            >
-              {s.tracking} ({s.fromCity} → {s.toCity})
-            </button>
-          ))}
-        </div>
+        {myShipments.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap text-xs pt-1">
+            <span className="text-muted-foreground font-medium">Your shipments:</span>
+            {myShipments.map((m: any) => (
+              <button
+                key={m.id}
+                onClick={() => setSelectedTrackingId(m.trackingId)}
+                className={`px-3 py-1 rounded-full border text-xs font-mono transition-all ${
+                  selectedTrackingId === m.trackingId
+                    ? "bg-primary text-primary-foreground border-primary font-semibold shadow-sm"
+                    : "bg-background hover:bg-muted text-muted-foreground"
+                }`}
+              >
+                {m.trackingId} ({m.senderCity} → {m.receiverCity})
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Active Parcel Carousel / Cards */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-lg font-semibold flex items-center gap-2">
-            <Package className="h-4 w-4 text-primary" /> Active Deliveries ({shipments.length})
-          </h2>
-          <span className="text-xs text-muted-foreground">Select any parcel to view live map</span>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-4">
-          {shipments.slice(0, 3).map((s) => (
-            <div
-              key={s.id}
-              onClick={() => selectParcel(s)}
-              className={`card-elevated p-4 cursor-pointer transition-all hover:-translate-y-0.5 relative overflow-hidden ${
-                selectedShipment.id === s.id
-                  ? "ring-2 ring-primary border-primary bg-primary/5"
-                  : "hover:border-primary/50"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-mono text-xs text-muted-foreground">{s.tracking}</span>
-                <StatusBadge status={s.status} />
-              </div>
-              <div className="font-display font-semibold text-base">
-                {s.fromCity} → {s.toCity}
-              </div>
-              <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
-                <span>{s.packageType}</span>
-                <span>·</span>
-                <span>{s.weight} kg</span>
-                {s.medical && (
-                  <Badge variant="destructive" className="h-4 px-1.5 text-[9px]">
-                    Medical
-                  </Badge>
-                )}
-              </div>
-
-              {/* Progress bar */}
-              <div className="mt-4 space-y-1">
-                <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-500"
-                    style={{ width: `${s.progress}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-[10px] text-muted-foreground pt-0.5">
-                  <span>Progress: {s.progress}%</span>
-                  <span className="font-medium text-foreground">{s.eta}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Main Selected Parcel Tracking Dashboard */}
-      <div className="space-y-6 pt-2">
-        <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-sm text-muted-foreground">
-                {selectedShipment.tracking}
-              </span>
-              <StatusBadge status={selectedShipment.status} />
-              {selectedShipment.medical && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-medical/10 text-medical border border-medical/20 text-[11px] font-medium px-2.5 py-0.5">
-                  <ShieldCheck className="h-3 w-3" /> Medical Priority
-                </span>
-              )}
-            </div>
-            <h2 className="font-display text-2xl font-semibold mt-1">
-              {selectedShipment.from} → {selectedShipment.to}
+      {myShipments.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+              <Package className="h-4 w-4 text-primary" /> Your shipments ({myShipments.length})
             </h2>
           </div>
-
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => {
-                navigator.clipboard?.writeText(window.location.href);
-                toast.success("Tracking link copied to clipboard!");
-              }}
-            >
-              <Share2 className="h-3.5 w-3.5" /> Share Track Link
-            </Button>
-            <Button
-              size="sm"
-              className="gap-1.5"
-              onClick={() =>
-                navigate({
-                  to: "/customer/track/$id",
-                  params: { id: selectedShipment.id },
-                })
-              }
-            >
-              Full Screen Map <Navigation className="h-3.5 w-3.5" />
-            </Button>
+          <div className="grid md:grid-cols-3 gap-4">
+            {myShipments.slice(0, 3).map((m: any) => (
+              <div
+                key={m.id}
+                onClick={() => setSelectedTrackingId(m.trackingId)}
+                className={`card-elevated p-4 cursor-pointer transition-all hover:-translate-y-0.5 ${
+                  selectedTrackingId === m.trackingId ? "ring-2 ring-primary border-primary bg-primary/5" : "hover:border-primary/50"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono text-xs text-muted-foreground">{m.trackingId}</span>
+                  <StatusBadge status={toBadgeStatus(m.status)} />
+                </div>
+                <div className="font-display font-semibold text-base">{m.senderCity} → {m.receiverCity}</div>
+                <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 capitalize">
+                  <span>{m.packageType}</span><span>·</span><span>{m.weightKg} kg</span>
+                  {m.packageType === "medical" && <Badge variant="destructive" className="h-4 px-1.5 text-[9px]">Medical</Badge>}
+                </div>
+                <div className="mt-4 space-y-1">
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full bg-primary transition-all duration-500" style={{ width: `${toProgress(m.status)}%` }} />
+                  </div>
+                  <div className="text-[10px] text-muted-foreground pt-0.5">{toProgress(m.status)}% complete</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
+      )}
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Left Column: Live Map & Timeline */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-                <span className="flex items-center gap-1.5 font-medium text-foreground">
-                  <MapPin className="h-3.5 w-3.5 text-primary" /> Live GPS Route Map
-                </span>
-                <span className="flex items-center gap-1 text-emerald-600 font-medium">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Live Telemetry
-                </span>
+      {!trackLoading && !s && selectedTrackingId && (
+        <div className="card-elevated p-10 text-center text-sm text-muted-foreground">
+          No shipment found for "{selectedTrackingId}".
+        </div>
+      )}
+
+      {!selectedTrackingId && myShipments.length === 0 && (
+        <div className="card-elevated p-10 text-center">
+          <div className="text-sm font-medium">Nothing to track yet</div>
+          <div className="text-xs text-muted-foreground mt-1">Book a shipment, or enter a tracking ID above.</div>
+        </div>
+      )}
+
+      {s && (
+        <div className="space-y-6 pt-2">
+          <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm text-muted-foreground">{s.trackingId}</span>
+                <StatusBadge status={toBadgeStatus(s.status)} />
+                {s.packageType === "medical" && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-medical/10 text-medical border border-medical/20 text-[11px] font-medium px-2.5 py-0.5">
+                    <ShieldCheck className="h-3 w-3" /> Medical Priority
+                  </span>
+                )}
               </div>
-              <RouteMap
-                from={selectedShipment.fromCity}
-                to={selectedShipment.toCity}
-                progress={selectedShipment.progress}
-                className="h-96 rounded-xl border shadow-sm"
-              />
+              <h2 className="font-display text-2xl font-semibold mt-1">{s.senderCity} → {s.receiverCity}</h2>
             </div>
 
-            {/* Fact Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="card-elevated p-4">
-                <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Estimated Arrival
-                </div>
-                <div className="text-sm font-semibold mt-1 text-primary">
-                  {selectedShipment.eta}
-                </div>
-              </div>
-              <div className="card-elevated p-4">
-                <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Current Hub
-                </div>
-                <div className="text-sm font-semibold mt-1">
-                  {selectedShipment.hub || "In Transit"}
-                </div>
-              </div>
-              <div className="card-elevated p-4">
-                <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Package Weight
-                </div>
-                <div className="text-sm font-semibold mt-1">
-                  {selectedShipment.weight} kg ({selectedShipment.packageType})
-                </div>
-              </div>
-              <div className="card-elevated p-4">
-                <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Eco Score
-                </div>
-                <div className="text-sm font-semibold mt-1 text-emerald-600">
-                  {selectedShipment.sustainability}% CO₂ Offset
-                </div>
-              </div>
-            </div>
-
-            {/* Timeline */}
-            <div className="card-elevated p-6 space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <div>
-                  <h3 className="font-display font-semibold text-base">
-                    Shipment Journey Timeline
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Real-time status events logged by AI Coordinator
-                  </p>
-                </div>
-                <Badge variant="outline" className="text-[10px] gap-1">
-                  <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Auto-Verified
-                </Badge>
-              </div>
-              <Timeline events={events} />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  navigator.clipboard?.writeText(window.location.href);
+                  toast.success("Tracking link copied to clipboard!");
+                }}
+              >
+                <Share2 className="h-3.5 w-3.5" /> Share Track Link
+              </Button>
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => navigate({ to: "/customer/track/$id", params: { id: s.trackingId } })}
+              >
+                Full Screen Map <Navigation className="h-3.5 w-3.5" />
+              </Button>
             </div>
           </div>
 
-          {/* Right Column: Driver, Instructions, AI Insights */}
-          <div className="space-y-5">
-            {/* Courier / Driver Card */}
-            {selectedShipment.driver ? (
-              <div className="card-elevated p-5 space-y-4">
-                <div className="text-xs uppercase tracking-widest text-muted-foreground">
-                  Assigned Courier Partner
+          <div className="grid lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                  <span className="flex items-center gap-1.5 font-medium text-foreground">
+                    <MapPin className="h-3.5 w-3.5 text-primary" /> Route
+                  </span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-full bg-primary text-primary-foreground grid place-items-center font-semibold text-base shadow-sm">
-                    {selectedShipment.driver
-                      .split(" ")
-                      .map((w: string) => w[0])
-                      .join("")}
+                <RouteMap from={s.senderCity} to={s.receiverCity} progress={toProgress(s.status)} className="h-96 rounded-xl border shadow-sm" />
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="card-elevated p-4">
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Estimated Arrival</div>
+                  <div className="text-sm font-semibold mt-1 text-primary">
+                    {s.estimatedDeliveryAt ? new Date(s.estimatedDeliveryAt).toLocaleString() : "TBD"}
                   </div>
+                </div>
+                <div className="card-elevated p-4">
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Priority</div>
+                  <div className="text-sm font-semibold mt-1 capitalize">{s.priority}</div>
+                </div>
+                <div className="card-elevated p-4">
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Package</div>
+                  <div className="text-sm font-semibold mt-1 capitalize">{s.weightKg} kg ({s.packageType})</div>
+                </div>
+                <div className="card-elevated p-4">
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Cost</div>
+                  <div className="text-sm font-semibold mt-1">₹{s.cost}</div>
+                </div>
+              </div>
+
+              <div className="card-elevated p-6 space-y-4">
+                <div className="flex items-center justify-between border-b pb-3">
                   <div>
-                    <div className="font-medium text-base">
-                      {selectedShipment.driver}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      ★ 4.92 Rating · 1,240 deliveries completed
-                    </div>
+                    <h3 className="font-display font-semibold text-base">Shipment Journey Timeline</h3>
+                    <p className="text-xs text-muted-foreground">Real events recorded against this shipment</p>
                   </div>
+                  <Badge variant="outline" className="text-[10px] gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-500" /> {events.length} events
+                  </Badge>
                 </div>
-                <div className="text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-lg border font-mono">
-                  {selectedShipment.vehicle}
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 gap-1.5"
-                    onClick={() => toast.info(`Calling driver at ${selectedShipment.driverPhone}`)}
-                  >
-                    <Phone className="h-3.5 w-3.5" /> Call Rider
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="flex-1 gap-1.5"
-                    onClick={() => toast.info("Opening direct live chat with driver...")}
-                  >
-                    <MessageSquare className="h-3.5 w-3.5" /> Message
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="card-elevated p-5 text-center space-y-2">
-                <Truck className="h-8 w-8 text-primary mx-auto opacity-80" />
-                <div className="font-medium text-sm">Assigning Courier Partner</div>
-                <p className="text-xs text-muted-foreground">
-                  AI dispatching nearest driver from {selectedShipment.hub || selectedShipment.fromCity}.
-                </p>
-              </div>
-            )}
-
-            {/* Delivery Instructions Preferences */}
-            <div className="card-elevated p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-medium flex items-center gap-1.5">
-                  <SlidersHorizontal className="h-4 w-4 text-primary" /> Delivery Preferences
-                </div>
-                <span className="text-[10px] text-muted-foreground">Live Sync</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Set custom instructions for the driver before arrival:
-              </p>
-
-              <div className="space-y-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => toggleInstruction("call")}
-                  className={`w-full p-3 rounded-lg border text-left text-xs flex items-center justify-between transition-colors ${
-                    instructions.call
-                      ? "border-primary bg-primary/5 text-foreground font-medium"
-                      : "hover:bg-muted/50 text-muted-foreground"
-                  }`}
-                >
-                  <span>Call 10 minutes before reaching</span>
-                  {instructions.call ? (
-                    <Check className="h-4 w-4 text-primary" />
-                  ) : (
-                    <span className="text-[10px] border px-1.5 py-0.5 rounded">Off</span>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => toggleInstruction("doorstep")}
-                  className={`w-full p-3 rounded-lg border text-left text-xs flex items-center justify-between transition-colors ${
-                    instructions.doorstep
-                      ? "border-primary bg-primary/5 text-foreground font-medium"
-                      : "hover:bg-muted/50 text-muted-foreground"
-                  }`}
-                >
-                  <span>Leave parcel at front door / security guard</span>
-                  {instructions.doorstep ? (
-                    <Check className="h-4 w-4 text-primary" />
-                  ) : (
-                    <span className="text-[10px] border px-1.5 py-0.5 rounded">Off</span>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => toggleInstruction("gate")}
-                  className={`w-full p-3 rounded-lg border text-left text-xs flex items-center justify-between transition-colors ${
-                    instructions.gate
-                      ? "border-primary bg-primary/5 text-foreground font-medium"
-                      : "hover:bg-muted/50 text-muted-foreground"
-                  }`}
-                >
-                  <span>Gate passcode / OTP required on delivery</span>
-                  {instructions.gate ? (
-                    <Check className="h-4 w-4 text-primary" />
-                  ) : (
-                    <span className="text-[10px] border px-1.5 py-0.5 rounded">Off</span>
-                  )}
-                </button>
+                {events.length > 0 ? <Timeline events={events} /> : (
+                  <div className="text-xs text-muted-foreground py-4 text-center">No status events recorded yet.</div>
+                )}
               </div>
             </div>
 
-            {/* AI ETA Breakdown */}
-            <div className="card-elevated p-5 bg-muted/40 space-y-3">
-              <div className="flex items-center gap-2 text-xs font-medium text-primary">
-                <Sparkles className="h-4 w-4" /> AI ETA Prediction Diagnostics
-              </div>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Traffic factor</span>
-                  <span className="font-medium">+4 min (Moderate)</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Weather delay</span>
-                  <span className="font-medium text-emerald-600">None (Clear sky)</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Hub sorting speed</span>
-                  <span className="font-medium text-emerald-600">Optimal (98%)</span>
-                </div>
-                <div className="flex justify-between border-t pt-2 mt-1">
-                  <span className="font-medium">ETA Confidence</span>
-                  <span className="font-semibold text-primary">97.8% High</span>
-                </div>
+            <div className="space-y-5">
+              <div className="card-elevated p-5 text-center space-y-2">
+                {s.assignedAgentId ? (
+                  <>
+                    <Truck className="h-8 w-8 text-primary mx-auto opacity-80" />
+                    <div className="font-medium text-sm">Delivery agent assigned</div>
+                    <p className="text-xs text-muted-foreground">Your parcel has an assigned delivery partner.</p>
+                  </>
+                ) : (
+                  <>
+                    <Truck className="h-8 w-8 text-muted-foreground mx-auto opacity-60" />
+                    <div className="font-medium text-sm">Awaiting assignment</div>
+                    <p className="text-xs text-muted-foreground">A delivery partner hasn't been assigned yet.</p>
+                  </>
+                )}
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

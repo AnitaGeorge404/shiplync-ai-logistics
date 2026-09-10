@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ShipmentStatus } from "./mock-data";
 
 async function getJson<T>(url: string, fallback: T): Promise<T> {
   const res = await fetch(url);
@@ -94,6 +95,45 @@ export function useAdminStats() {
       }),
     refetchInterval: 15000,
   });
+}
+
+// Maps our real shipment_status enum to the narrower status union
+// StatusBadge/mock UI was built against, so real data can flow through
+// the existing badge component without rewriting it.
+const STATUS_BADGE_MAP: Record<string, string> = {
+  booked: "booked",
+  payment_completed: "booked",
+  picked_up: "picked_up",
+  arrived_hub: "at_hub",
+  in_transit: "in_transit",
+  out_for_delivery: "out_for_delivery",
+  delivery_attempted: "exception",
+  delivered: "delivered",
+  returned: "exception",
+  cancelled: "exception",
+};
+
+export function toBadgeStatus(status: string): ShipmentStatus {
+  return (STATUS_BADGE_MAP[status] ?? status) as ShipmentStatus;
+}
+
+// Rough progress percentage for a real shipment, for progress bars/route
+// maps built against the mock data's 0-100 "progress" field.
+const STATUS_PROGRESS: Record<string, number> = {
+  booked: 5,
+  payment_completed: 10,
+  picked_up: 25,
+  arrived_hub: 40,
+  in_transit: 60,
+  out_for_delivery: 85,
+  delivery_attempted: 90,
+  delivered: 100,
+  returned: 100,
+  cancelled: 0,
+};
+
+export function toProgress(status: string): number {
+  return STATUS_PROGRESS[status] ?? 0;
 }
 
 export { useQueryClient };
