@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { analytics } from "@/lib/mock-data";
 import { useShipments } from "@/lib/api-hooks";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,9 +45,34 @@ function useRealCategoryMix() {
   }, [hubShipments]);
 }
 
+function useRealVolume() {
+  const { data: hubShipments = [] } = useShipments("hub");
+  return useMemo(() => {
+    const byDay = new Map<string, { shipments: number; delivered: number }>();
+    for (const s of hubShipments as any[]) {
+      const day = new Date(s.createdAt).toLocaleDateString("en-IN", { weekday: "short" });
+      const entry = byDay.get(day) ?? { shipments: 0, delivered: 0 };
+      entry.shipments += 1;
+      if (s.status === "delivered") entry.delivered += 1;
+      byDay.set(day, entry);
+    }
+    return Array.from(byDay.entries()).map(([day, v]) => ({ day, ...v }));
+  }, [hubShipments]);
+}
+
 function HubAnalyticsPage() {
   const [timeRange, setTimeRange] = useState("today");
   const categoryMix = useRealCategoryMix();
+  const volume = useRealVolume();
+  const { data: hubShipments = [] } = useShipments("hub");
+  const hubTotal = hubShipments.length;
+  const deliveredShipments = hubShipments.filter((s: any) => s.status === "delivered" && s.deliveredAt);
+  const hubDelivered = deliveredShipments.length;
+  const onTimeCount = deliveredShipments.filter(
+    (s: any) => s.estimatedDeliveryAt && new Date(s.deliveredAt) <= new Date(s.estimatedDeliveryAt),
+  ).length;
+  const hubOnTimePct = hubDelivered > 0 ? Math.round((onTimeCount / hubDelivered) * 100) : 100;
+  const hubMedical = hubShipments.filter((s: any) => s.packageType === "medical").length;
 
   return (
     <div className="space-y-6">
@@ -87,46 +111,36 @@ function HubAnalyticsPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards — real counts from this hub's shipments; sorting-speed and
+          error-rate telemetry isn't instrumented, so those cards were removed
+          rather than shown with fabricated numbers. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Hourly Throughput <BarChart3 className="h-4 w-4 text-foreground" />
+            Total Handled <BarChart3 className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">342 / hr</div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
-            <TrendingUp className="h-3 w-3" /> +14% peak efficiency
-          </div>
+          <div className="text-2xl font-semibold font-display mt-2">{hubTotal}</div>
         </div>
 
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Avg Sorting Speed <Clock className="h-4 w-4 text-foreground" />
+            Delivered <Clock className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">1.4s / parcel</div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-1">
-            −0.3s laser scan decoding
-          </div>
+          <div className="text-2xl font-semibold font-display mt-2">{hubDelivered}</div>
         </div>
 
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Dispatched On-Time <PackageCheck className="h-4 w-4 text-foreground" />
+            On-Time Rate <PackageCheck className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">98.2%</div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
-            <TrendingUp className="h-3 w-3" /> +0.8% SLA compliance
-          </div>
+          <div className="text-2xl font-semibold font-display mt-2">{hubOnTimePct}%</div>
         </div>
 
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Sorting Error Rate <SlidersHorizontal className="h-4 w-4 text-foreground" />
+            Medical Priority <SlidersHorizontal className="h-4 w-4 text-foreground" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">0.04%</div>
-          <div className="text-[11px] text-muted-foreground mt-1">
-            Only 1 mis-sort out of 2,400
-          </div>
+          <div className="text-2xl font-semibold font-display mt-2">{hubMedical}</div>
         </div>
       </div>
 
@@ -150,7 +164,7 @@ function HubAnalyticsPage() {
 
           <div className="h-64 pt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={analytics.volume} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <AreaChart data={volume} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
