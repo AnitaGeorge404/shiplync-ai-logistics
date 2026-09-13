@@ -37,7 +37,7 @@ export const Route = createFileRoute("/customer/track/$id")({
     if (typeof window === "undefined") return null; // resolved client-side; see below
     const res = await fetch(`/api/shipments/track/${encodeURIComponent(params.id)}`);
     if (!res.ok) throw notFound();
-    return res.json() as Promise<{ shipment: any; events: any[] }>;
+    return res.json() as Promise<{ shipment: any; events: any[]; currentHubName: string | null }>;
   },
   head: ({ loaderData }) => ({
     meta: [
@@ -103,8 +103,8 @@ function TrackShipment() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Fact k="ETA" v={s.estimatedDeliveryAt ? new Date(s.estimatedDeliveryAt).toLocaleString() : "TBD"} />
             <Fact k="Priority" v={s.priority} />
-            <Fact k="Last event" v={nextEvent.replace(/_/g, " ")} />
-            <Fact k="Cost" v={`₹${s.cost}`} />
+            <Fact k="Current location" v={data.currentHubName ? `${data.currentHubName}` : nextEvent.replace(/_/g, " ")} />
+            <Fact k="Distance" v={s.distanceKm ? `${Math.round(s.distanceKm)} km` : "—"} />
           </div>
 
           <div className="card-elevated p-5">

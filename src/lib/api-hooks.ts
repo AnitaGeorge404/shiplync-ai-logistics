@@ -69,6 +69,13 @@ export function usePayments(scope?: "all") {
   });
 }
 
+export function useAddresses() {
+  return useQuery({
+    queryKey: ["addresses"],
+    queryFn: async () => (await getJson<{ addresses: any[] }>("/api/addresses", { addresses: [] })).addresses,
+  });
+}
+
 export function useNotifications() {
   return useQuery({
     queryKey: ["notifications"],

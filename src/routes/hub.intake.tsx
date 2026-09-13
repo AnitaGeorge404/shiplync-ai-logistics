@@ -79,7 +79,8 @@ function HubIntakePage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           status: "arrived_hub",
-          location: lookupData.shipment.receiverCity,
+          // location is intentionally omitted — the server fills in the
+          // real hub name for the scanning hub_staff user's own hub.
           note: "Scanned at hub intake.",
         }),
       });

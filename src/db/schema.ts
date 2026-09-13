@@ -186,10 +186,16 @@ export const shipments = pgTable(
     receiverLng: doublePrecision("receiver_lng"),
 
     weightKg: doublePrecision("weight_kg").notNull(),
+    lengthCm: doublePrecision("length_cm"),
+    widthCm: doublePrecision("width_cm"),
+    heightCm: doublePrecision("height_cm"),
     packageType: packageTypeEnum("package_type").notNull().default("standard"),
     priority: priorityEnum("priority").notNull().default("normal"),
     insured: boolean("insured").notNull().default(false),
     declaredValue: doublePrecision("declared_value"),
+
+    // Real distance-based ETA inputs (SRS "dynamic estimated delivery").
+    distanceKm: doublePrecision("distance_km"),
 
     cost: doublePrecision("cost").notNull(),
 

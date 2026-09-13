@@ -32,11 +32,56 @@ export function calculateShipmentCost(input: {
   return Math.round((subtotal + insuranceCost) * 100) / 100;
 }
 
-// Hours from booking to estimated delivery, before hub/transit delays are known.
-export function estimateDeliveryHours(input: { priority: string; packageType: string }) {
-  if (input.packageType === "medical" || input.priority === "critical") return 6;
-  if (input.priority === "high" || input.packageType === "express") return 24;
-  return 48;
+// Hours from booking to estimated delivery — a real function of distance,
+// package type, and priority, not a fixed bucket. Distance comes from
+// src/lib/distance.ts's calculateDistance() (haversine + road inflation
+// over a real Indian city/state coordinate table) — swap that function's
+// internals for a real geocoding/routing API later without touching this.
+//
+//   estimatedHours = hubProcessingHours(packageType, priority)
+//                   + distanceKm / effectiveSpeedKmh(priority)
+//                   + handlingAdjustmentHours(packageType)
+//   then floored to a minimum realistic transit time per priority tier
+//   (couriers don't deliver in 90 minutes just because two cities are close).
+const HUB_PROCESSING_HOURS: Record<string, number> = {
+  critical: 1,
+  high: 2,
+  normal: 4,
+};
+// km/h a shipment effectively moves through the network at, including all
+// hub stops — critical/high priority get a faster (air-assisted) network.
+const EFFECTIVE_SPEED_KMH: Record<string, number> = {
+  critical: 250,
+  high: 60,
+  normal: 35,
+};
+const HANDLING_ADJUSTMENT_HOURS: Record<string, number> = {
+  standard: 0,
+  express: 0,
+  medical: 0,
+  fragile: 3, // extra careful packing/unpacking time at each hub
+};
+const MIN_HOURS_BY_PRIORITY: Record<string, number> = {
+  critical: 4,
+  high: 12,
+  normal: 20,
+};
+
+export function estimateDeliveryHours(input: {
+  priority: string;
+  packageType: string;
+  distanceKm: number;
+}) {
+  const priorityKey = input.priority in EFFECTIVE_SPEED_KMH ? input.priority : "normal";
+  const hubHours = HUB_PROCESSING_HOURS[priorityKey];
+  const speedKmh = EFFECTIVE_SPEED_KMH[priorityKey];
+  const handlingHours = HANDLING_ADJUSTMENT_HOURS[input.packageType] ?? 0;
+  const minHours = MIN_HOURS_BY_PRIORITY[priorityKey];
+
+  const transitHours = Math.max(input.distanceKm, 0) / speedKmh;
+  const totalHours = hubHours + transitHours + handlingHours;
+
+  return Math.round(Math.max(totalHours, minHours) * 10) / 10;
 }
 
 export function generateTrackingId() {
