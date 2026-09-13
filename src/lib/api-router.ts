@@ -15,6 +15,8 @@ import {
 import { auth } from "./auth";
 import { calculateShipmentCost, estimateDeliveryHours, generateTrackingId } from "./pricing";
 import { detectExceptions } from "./exception-detection";
+import { calculateDistance } from "./distance";
+import { phoneSchema, addressLineSchema, citySchema, stateSchema, pincodeSchema, weightSchema, dimensionSchema } from "./validation";
 import { eq, desc, and, isNull, gte, notInArray, sql as dsql } from "drizzle-orm";
 
 function json(data: unknown, status = 200) {
@@ -33,20 +35,27 @@ function requireRole(user: { role?: string | null } | null | undefined, roles: s
   return !!user && roles.includes((user as any).role);
 }
 
+// Same validation primitives the booking form uses client-side (src/lib/
+// validation.ts) — the server never trusts that the UI actually enforced
+// them, so every field is re-validated here regardless of what the client
+// sent.
 const createShipmentSchema = z.object({
-  senderName: z.string().min(1),
-  senderPhone: z.string().min(6),
-  senderAddressLine: z.string().min(1),
-  senderCity: z.string().min(1),
-  senderState: z.string().min(1),
-  senderPincode: z.string().min(3),
-  receiverName: z.string().min(1),
-  receiverPhone: z.string().min(6),
-  receiverAddressLine: z.string().min(1),
-  receiverCity: z.string().min(1),
-  receiverState: z.string().min(1),
-  receiverPincode: z.string().min(3),
-  weightKg: z.number().positive(),
+  senderName: z.string().trim().min(2),
+  senderPhone: phoneSchema,
+  senderAddressLine: addressLineSchema,
+  senderCity: citySchema,
+  senderState: stateSchema,
+  senderPincode: pincodeSchema,
+  receiverName: z.string().trim().min(2),
+  receiverPhone: phoneSchema,
+  receiverAddressLine: addressLineSchema,
+  receiverCity: citySchema,
+  receiverState: stateSchema,
+  receiverPincode: pincodeSchema,
+  weightKg: weightSchema,
+  lengthCm: dimensionSchema,
+  widthCm: dimensionSchema,
+  heightCm: dimensionSchema,
   packageType: z.enum(["standard", "fragile", "medical", "express"]).default("standard"),
   priority: z.enum(["normal", "high", "critical"]).default("normal"),
   insured: z.boolean().default(false),
@@ -181,7 +190,15 @@ export async function handleApiRequest(request: Request): Promise<Response> {
 
       const cost = calculateShipmentCost({ ...input, priority });
       const trackingId = generateTrackingId();
-      const etaHours = estimateDeliveryHours({ priority, packageType: input.packageType });
+
+      // Real distance-based ETA (src/lib/distance.ts + src/lib/pricing.ts) —
+      // origin/destination and package type genuinely change the estimate,
+      // not a fixed bucket per priority.
+      const distanceKm = calculateDistance(
+        { city: input.senderCity, state: input.senderState },
+        { city: input.receiverCity, state: input.receiverState },
+      );
+      const etaHours = estimateDeliveryHours({ priority, packageType: input.packageType, distanceKm });
       const estimatedDeliveryAt = new Date(Date.now() + etaHours * 60 * 60 * 1000);
 
       const [shipment] = await db
@@ -192,6 +209,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
           ...input,
           priority,
           cost,
+          distanceKm,
           status: "booked",
           estimatedDeliveryAt,
         })
@@ -294,7 +312,15 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         .where(eq(shipmentEvents.shipmentId, shipment.id))
         .orderBy(shipmentEvents.createdAt);
 
-      return json({ shipment, events });
+      // Resolve the real current hub name, if any, so the tracking UI can
+      // show "Arrived at <Hub Name>" instead of a generic status string.
+      let currentHubName: string | null = null;
+      if (shipment.currentHubId) {
+        const [hub] = await db.select({ name: hubs.name }).from(hubs).where(eq(hubs.id, shipment.currentHubId)).limit(1);
+        currentHubName = hub?.name ?? null;
+      }
+
+      return json({ shipment, events, currentHubName });
     }
 
     // PATCH /api/shipments/:id/status — delivery_agent, hub_staff, admin
@@ -332,6 +358,20 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       };
       if (parsed.data.status === "delivered") updates.deliveredAt = new Date();
 
+      // A hub_staff scan marking a shipment "arrived_hub" means it is
+      // physically at *their* hub right now — record that as the real
+      // currentHubId (and originHubId, the first time this happens) so
+      // hub-scoped queries, per-hub load stats, and the customer-visible
+      // "current hub" actually reflect reality instead of staying null
+      // forever (previously nothing in the real flow ever set this).
+      let eventLocation = parsed.data.location;
+      if (parsed.data.status === "arrived_hub" && (user as any).role === "hub_staff" && (user as any).hubId) {
+        updates.currentHubId = (user as any).hubId;
+        if (!existing.originHubId) updates.originHubId = (user as any).hubId;
+        const [actorHub] = await db.select({ name: hubs.name }).from(hubs).where(eq(hubs.id, (user as any).hubId)).limit(1);
+        if (actorHub) eventLocation = actorHub.name;
+      }
+
       const [updated] = await db
         .update(shipments)
         .set(updates)
@@ -341,7 +381,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       await db.insert(shipmentEvents).values({
         shipmentId,
         status: parsed.data.status,
-        location: parsed.data.location,
+        location: eventLocation,
         note: parsed.data.note,
         actorUserId: user!.id,
       });
@@ -758,6 +798,26 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         .values({ userId: user.id, ...parsed.data })
         .returning();
       return json({ address }, 201);
+    }
+
+    if (parts[1] === "addresses" && parts.length === 3 && request.method === "PATCH") {
+      const user = await getSessionUser(request);
+      if (!user) return json({ error: "Not authenticated" }, 401);
+      const body = await request.json();
+      const parsed = addressSchema.partial().safeParse(body);
+      if (!parsed.success) return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+
+      if (parsed.data.isDefault) {
+        await db.update(addresses).set({ isDefault: false }).where(eq(addresses.userId, user.id));
+      }
+
+      const [address] = await db
+        .update(addresses)
+        .set(parsed.data)
+        .where(and(eq(addresses.id, parts[2]), eq(addresses.userId, user.id)))
+        .returning();
+      if (!address) return json({ error: "Address not found" }, 404);
+      return json({ address });
     }
 
     if (parts[1] === "addresses" && parts.length === 3 && request.method === "DELETE") {

@@ -34,9 +34,9 @@ const bookRes = await call("/api/shipments", {
   method: "POST",
   headers: { "content-type": "application/json", cookie: custCookie },
   body: JSON.stringify({
-    senderName: "S", senderPhone: "+919000000000", senderAddressLine: "A", senderCity: "Mumbai", senderState: "MH", senderPincode: "400002",
-    receiverName: "R", receiverPhone: "+919000000002", receiverAddressLine: "B", receiverCity: "Pune", receiverState: "MH", receiverPincode: "411001",
-    weightKg: 1, packageType: "standard", priority: "normal", insured: false,
+    senderName: "SM Sender", senderPhone: "9000000000", senderAddressLine: "88 Marine Drive", senderCity: "Mumbai", senderState: "Maharashtra", senderPincode: "400002",
+    receiverName: "SM Receiver", receiverPhone: "9000000002", receiverAddressLine: "12 FC Road", receiverCity: "Pune", receiverState: "Maharashtra", receiverPincode: "411001",
+    weightKg: 1, lengthCm: 20, widthCm: 15, heightCm: 10, packageType: "standard", priority: "normal", insured: false,
   }),
 });
 const shipmentId = (await bookRes.json()).shipment.id;

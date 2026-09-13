@@ -108,7 +108,6 @@ export function RouteMap({ from, to, progress = 60, hubs, className, compact }: 
           <div className="absolute bottom-3 left-3 glass rounded-lg px-3 py-2 flex items-center gap-2 text-xs">
             <Truck className="h-3.5 w-3.5 text-primary" />
             <span className="font-medium">{Math.round(p)}% complete</span>
-            <span className="text-muted-foreground">· AI ETA updating</span>
           </div>
         </>
       )}

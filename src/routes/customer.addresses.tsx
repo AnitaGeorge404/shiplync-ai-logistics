@@ -14,9 +14,8 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { MapPinned, Plus, Trash2, Star } from "lucide-react";
+import { MapPinned, Plus, Trash2, Star, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/customer/addresses")({
@@ -58,6 +57,7 @@ function AddressesPage() {
   const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
 
@@ -72,12 +72,12 @@ function AddressesPage() {
     enabled: isAuthenticated,
   });
 
-  async function handleAdd(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch("/api/addresses", {
-        method: "POST",
+      const res = await fetch(editingId ? `/api/addresses/${editingId}` : "/api/addresses", {
+        method: editingId ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(form),
       });
@@ -86,13 +86,36 @@ function AddressesPage() {
         toast.error(data.error || "Could not save address");
         return;
       }
-      toast.success("Address saved");
+      toast.success(editingId ? "Address updated" : "Address saved");
       setForm(emptyForm);
+      setEditingId(null);
       setOpen(false);
       queryClient.invalidateQueries({ queryKey: ["addresses"] });
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function openEdit(a: Address) {
+    setEditingId(a.id);
+    setForm({
+      label: a.label,
+      contactName: a.contactName,
+      contactPhone: a.contactPhone,
+      line1: a.line1,
+      line2: a.line2 ?? "",
+      city: a.city,
+      state: a.state,
+      pincode: a.pincode,
+      isDefault: a.isDefault,
+    });
+    setOpen(true);
+  }
+
+  function openAdd() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setOpen(true);
   }
 
   async function handleDelete(id: string) {
@@ -123,17 +146,15 @@ function AddressesPage() {
           <h1 className="font-display text-3xl font-semibold mt-1">Saved addresses</h1>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-1.5">
-              <Plus className="h-4 w-4" /> Add address
-            </Button>
-          </DialogTrigger>
+          <Button className="gap-1.5" onClick={openAdd}>
+            <Plus className="h-4 w-4" /> Add address
+          </Button>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Add a saved address</DialogTitle>
+              <DialogTitle>{editingId ? "Edit saved address" : "Add a saved address"}</DialogTitle>
               <DialogDescription>Used to pre-fill pickup/delivery details when booking.</DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleAdd} className="space-y-3 py-2 text-sm">
+            <form onSubmit={handleSubmit} className="space-y-3 py-2 text-sm">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Label</Label>
@@ -230,14 +251,19 @@ function AddressesPage() {
                     </span>
                   )}
                 </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-destructive"
-                  onClick={() => handleDelete(a.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(a)}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-destructive"
+                    onClick={() => handleDelete(a.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
               <div className="text-sm">{a.contactName} · {a.contactPhone}</div>
               <div className="text-xs text-muted-foreground">
