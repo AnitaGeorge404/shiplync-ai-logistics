@@ -8,6 +8,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Check, MapPin, Package, CreditCard, Sparkles, ShieldCheck, Zap, Leaf, ArrowRight, Copy, LogIn } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { calculateShipmentCost, estimateDeliveryHours } from "@/lib/pricing";
 
 export const Route = createFileRoute("/customer/book")({
   head: () => ({
@@ -37,9 +38,17 @@ function BookShipment() {
     null,
   );
 
-  const base = pkg === "express" ? 220 : pkg === "medical" ? 480 : pkg === "fragile" ? 180 : 120;
-  const cost = Math.round(base + weight * 60 + (insurance ? 45 : 0));
-  const tracking = booked?.trackingId ?? "SLX-" + Math.floor(70000 + Math.random() * 9000) + "-IN";
+  // Same pricing engine the server uses (src/lib/pricing.ts) — the preview
+  // shown here always matches what the customer is actually charged.
+  const previewPriority = pkg === "medical" ? "high" : "normal";
+  const cost = calculateShipmentCost({
+    weightKg: weight,
+    packageType: pkg,
+    priority: previewPriority,
+    insured: insurance,
+    declaredValue: insurance ? 50000 : undefined,
+  });
+  const tracking = booked?.trackingId ?? "";
 
   const apiPackageType = pkg; // "standard" | "express" | "medical" | "fragile" match the API enum
 
@@ -195,17 +204,20 @@ function BookShipment() {
           {step === 2 && (
             <div className="space-y-4">
               <div className="rounded-xl border p-5 bg-muted/40">
-                <div className="text-xs uppercase tracking-widest text-muted-foreground">AI cost estimation</div>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground">Cost estimate</div>
                 <div className="mt-1 font-display text-4xl font-semibold">₹{cost}</div>
-                <div className="text-xs text-muted-foreground mt-1">Includes AI-optimized routing and CO₂-neutral offset.</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Computed by the same deterministic pricing engine used at booking — this is the real amount you'll be charged.
+                </div>
               </div>
               <div className="grid sm:grid-cols-2 gap-3 text-sm">
-                <Line l="Base fare" v={`₹${base}`} />
-                <Line l={`Weight × ${weight} kg`} v={`₹${Math.round(weight * 60)}`} />
-                <Line l="Insurance" v={insurance ? "₹45" : "—"} />
-                <Line l="Fuel surcharge" v="Included" muted />
-                <Line l="AI route savings" v="− ₹32" pos />
-                <Line l="Estimated delivery" v={pkg === "express" ? "Today, 8:15 PM" : "Tomorrow"} />
+                <Line l="Package type" v={pkg} />
+                <Line l={`Weight`} v={`${weight} kg`} />
+                <Line l="Insurance" v={insurance ? "Included (1.5% of declared value)" : "Not selected"} />
+                <Line
+                  l="Estimated delivery"
+                  v={`~${estimateDeliveryHours({ priority: pkg === "medical" ? "high" : "normal", packageType: pkg })}h after pickup`}
+                />
               </div>
             </div>
           )}

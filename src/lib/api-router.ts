@@ -15,7 +15,7 @@ import {
 import { auth } from "./auth";
 import { calculateShipmentCost, estimateDeliveryHours, generateTrackingId } from "./pricing";
 import { detectExceptions } from "./exception-detection";
-import { eq, desc, and, isNull, gte, sql as dsql } from "drizzle-orm";
+import { eq, desc, and, isNull, gte, notInArray, sql as dsql } from "drizzle-orm";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -71,6 +71,26 @@ const updateStatusSchema = z.object({
   location: z.string().optional(),
   note: z.string().optional(),
 });
+
+// Enforced server-side shipment lifecycle (SRS state machine requirement).
+// Every PATCH /status request is checked against this map before being
+// applied — the frontend is never trusted to enforce valid transitions.
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  // "arrived_hub" is reachable directly from "booked" because Hub Intake is
+  // this app's first physical checkpoint — there's no separate courier
+  // pickup-scan step in the UI, so requiring "picked_up" first would make
+  // the real Hub Intake screen unusable.
+  booked: ["payment_completed", "picked_up", "arrived_hub", "cancelled"],
+  payment_completed: ["picked_up", "arrived_hub", "cancelled"],
+  picked_up: ["arrived_hub", "in_transit", "out_for_delivery", "cancelled"],
+  arrived_hub: ["in_transit", "out_for_delivery", "cancelled"],
+  in_transit: ["arrived_hub", "out_for_delivery"],
+  out_for_delivery: ["delivery_attempted", "delivered", "returned"],
+  delivery_attempted: ["out_for_delivery", "delivered", "returned"],
+  delivered: [],
+  returned: [],
+  cancelled: [],
+};
 
 const assignSchema = z.object({
   agentId: z.string().optional(),
@@ -295,6 +315,17 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         return json({ error: "Not authorized — this shipment isn't assigned to you" }, 403);
       }
 
+      const allowedNext = ALLOWED_TRANSITIONS[existing.status] ?? [];
+      if (!allowedNext.includes(parsed.data.status)) {
+        return json(
+          {
+            error: `Invalid transition: cannot move from "${existing.status}" to "${parsed.data.status}"`,
+            allowedNext,
+          },
+          409,
+        );
+      }
+
       const updates: Record<string, unknown> = {
         status: parsed.data.status,
         updatedAt: new Date(),
@@ -385,6 +416,13 @@ export async function handleApiRequest(request: Request): Promise<Response> {
 
       if ((user as any).role === "delivery_agent" && existing.assignedAgentId !== user!.id) {
         return json({ error: "Not authorized — this shipment isn't assigned to you" }, 403);
+      }
+
+      if (!["out_for_delivery", "delivery_attempted"].includes(existing.status)) {
+        return json(
+          { error: `Cannot record a delivery attempt while shipment is "${existing.status}" — it must be out for delivery first.` },
+          409,
+        );
       }
 
       const priorAttempts = await db
@@ -536,7 +574,26 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     // ---------------------------------------------------------------
     if (parts[1] === "hubs" && parts.length === 2 && request.method === "GET") {
       const rows = await db.select().from(hubs);
-      return json({ hubs: rows });
+
+      // Real per-hub load: active shipments currently routed through each
+      // hub vs. its declared capacity — no fabricated numbers.
+      const loadRows = await db
+        .select({ hubId: shipments.currentHubId, count: dsql<number>`count(*)::int` })
+        .from(shipments)
+        .where(notInArray(shipments.status, ["delivered", "returned", "cancelled"] as any))
+        .groupBy(shipments.currentHubId);
+      const loadMap = new Map(loadRows.map((r) => [r.hubId, r.count]));
+
+      const hubsWithLoad = rows.map((h) => {
+        const activeShipmentCount = loadMap.get(h.id) ?? 0;
+        return {
+          ...h,
+          activeShipmentCount,
+          loadPct: h.capacity > 0 ? Math.min(100, Math.round((activeShipmentCount / h.capacity) * 100)) : 0,
+        };
+      });
+
+      return json({ hubs: hubsWithLoad });
     }
 
     if (parts[1] === "hubs" && parts.length === 2 && request.method === "POST") {

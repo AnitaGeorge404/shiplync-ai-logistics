@@ -1,13 +1,11 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { shipments, timeline, type Shipment } from "@/lib/mock-data";
 import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { RouteMap } from "@/components/shiplync/RouteMap";
 import { Timeline } from "@/components/shiplync/Timeline";
 import { Button } from "@/components/ui/button";
-import { Phone, MessageSquare, Share2, ShieldCheck, Camera, Sparkles, ArrowLeft } from "lucide-react";
+import { ShieldCheck, Camera, Sparkles, ArrowLeft, Share2 } from "lucide-react";
+import { toast } from "sonner";
 
-// Maps our real (DB-backed) shipment status enum to an approximate progress
-// percentage so it can reuse the existing mock-data-driven timeline/map UI.
 const STATUS_PROGRESS: Record<string, number> = {
   booked: 5,
   payment_completed: 10,
@@ -21,51 +19,29 @@ const STATUS_PROGRESS: Record<string, number> = {
   cancelled: 0,
 };
 
-async function fetchRealShipment(trackingId: string): Promise<Shipment | null> {
-  if (typeof window === "undefined") return null; // client-side only, see PROGRESS_REPORT.md
-  try {
-    const res = await fetch(`/api/shipments/track/${encodeURIComponent(trackingId)}`);
-    if (!res.ok) return null;
-    const { shipment } = await res.json();
-    const progress = STATUS_PROGRESS[shipment.status] ?? 0;
-    return {
-      id: shipment.trackingId,
-      tracking: shipment.trackingId,
-      from: shipment.senderAddressLine,
-      to: shipment.receiverAddressLine,
-      fromCity: shipment.senderCity,
-      toCity: shipment.receiverCity,
-      status: shipment.status === "returned" || shipment.status === "cancelled"
-        ? "exception"
-        : (shipment.status as Shipment["status"]),
-      weight: shipment.weightKg,
-      packageType: (shipment.packageType.charAt(0).toUpperCase() +
-        shipment.packageType.slice(1)) as Shipment["packageType"],
-      medical: shipment.packageType === "medical",
-      eta: shipment.estimatedDeliveryAt
-        ? new Date(shipment.estimatedDeliveryAt).toLocaleString()
-        : "TBD",
-      price: shipment.cost,
-      progress,
-      bookedAt: shipment.createdAt,
-      sustainability: 70,
-    };
-  } catch {
-    return null;
-  }
-}
+const STATUS_BADGE_MAP: Record<string, string> = {
+  booked: "booked",
+  payment_completed: "booked",
+  picked_up: "picked_up",
+  arrived_hub: "at_hub",
+  in_transit: "in_transit",
+  out_for_delivery: "out_for_delivery",
+  delivery_attempted: "exception",
+  delivered: "delivered",
+  returned: "exception",
+  cancelled: "exception",
+};
 
 export const Route = createFileRoute("/customer/track/$id")({
   loader: async ({ params }) => {
-    const mock = shipments.find((x) => x.id === params.id);
-    if (mock) return mock;
-    const real = await fetchRealShipment(params.id);
-    if (real) return real;
-    throw notFound();
+    if (typeof window === "undefined") return null; // resolved client-side; see below
+    const res = await fetch(`/api/shipments/track/${encodeURIComponent(params.id)}`);
+    if (!res.ok) throw notFound();
+    return res.json() as Promise<{ shipment: any; events: any[] }>;
   },
   head: ({ loaderData }) => ({
     meta: [
-      { title: loaderData ? `Tracking ${loaderData.tracking} — ShipLync` : "Track shipment — ShipLync" },
+      { title: loaderData?.shipment ? `Tracking ${loaderData.shipment.trackingId} — ShipLync` : "Track shipment — ShipLync" },
       { name: "description", content: "Live shipment tracking with map, ETA and delivery timeline." },
     ],
   }),
@@ -73,89 +49,108 @@ export const Route = createFileRoute("/customer/track/$id")({
 });
 
 function TrackShipment() {
-  const s = Route.useLoaderData();
-  const events = timeline(s);
+  const data = Route.useLoaderData();
+
+  if (!data) {
+    return <div className="text-sm text-muted-foreground py-10 text-center">Loading tracking data…</div>;
+  }
+
+  const s = data.shipment;
+  const events = data.events.map((e: any) => ({
+    key: e.id,
+    label: e.status.replace(/_/g, " "),
+    time: new Date(e.createdAt).toLocaleString(),
+    location: e.location,
+    note: e.note,
+    done: true,
+  }));
+  const progress = STATUS_PROGRESS[s.status] ?? 0;
+  const nextEvent = data.events[data.events.length - 1]?.status ?? "booked";
 
   return (
     <div className="space-y-6">
       <Link to="/customer" className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5"><ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard</Link>
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <div className="text-xs font-mono text-muted-foreground">{s.tracking}</div>
-          <h1 className="font-display text-3xl font-semibold mt-1">{s.fromCity} → {s.toCity}</h1>
+          <div className="text-xs font-mono text-muted-foreground">{s.trackingId}</div>
+          <h1 className="font-display text-3xl font-semibold mt-1">{s.senderCity} → {s.receiverCity}</h1>
           <div className="mt-2 flex items-center gap-2 flex-wrap">
-            <StatusBadge status={s.status} />
-            {s.medical && <span className="inline-flex items-center gap-1 rounded-full bg-medical/10 text-medical border border-medical/20 text-[11px] font-medium px-2.5 py-0.5">
+            <StatusBadge status={STATUS_BADGE_MAP[s.status] as any} />
+            {s.packageType === "medical" && <span className="inline-flex items-center gap-1 rounded-full bg-medical/10 text-medical border border-medical/20 text-[11px] font-medium px-2.5 py-0.5">
               <ShieldCheck className="h-3 w-3" /> Medical priority</span>}
-            <span className="text-xs text-muted-foreground">{s.packageType} · {s.weight} kg · Sustainability {s.sustainability}</span>
+            <span className="text-xs text-muted-foreground capitalize">{s.packageType} · {s.weightKg} kg</span>
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5"><Share2 className="h-3.5 w-3.5" /> Share</Button>
-          <Button variant="outline" size="sm" className="gap-1.5"><Phone className="h-3.5 w-3.5" /> Call driver</Button>
-          <Button size="sm" className="gap-1.5"><MessageSquare className="h-3.5 w-3.5" /> Message</Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              navigator.clipboard?.writeText(window.location.href);
+              toast.success("Tracking link copied");
+            }}
+          >
+            <Share2 className="h-3.5 w-3.5" /> Share
+          </Button>
         </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <RouteMap from={s.fromCity} to={s.toCity} progress={s.progress} className="h-96" />
+          <RouteMap from={s.senderCity} to={s.receiverCity} progress={progress} className="h-96" />
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Fact k="ETA" v={s.eta} />
-            <Fact k="Current hub" v={s.hub ?? "—"} />
-            <Fact k="Next event" v="Out for delivery" />
-            <Fact k="Distance left" v="24.6 km" />
+            <Fact k="ETA" v={s.estimatedDeliveryAt ? new Date(s.estimatedDeliveryAt).toLocaleString() : "TBD"} />
+            <Fact k="Priority" v={s.priority} />
+            <Fact k="Last event" v={nextEvent.replace(/_/g, " ")} />
+            <Fact k="Cost" v={`₹${s.cost}`} />
           </div>
 
           <div className="card-elevated p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="font-display font-semibold">Delivery timeline</div>
-              <div className="text-xs text-muted-foreground">Auto-updated by AI Coordinator</div>
+              <div className="text-xs text-muted-foreground">{events.length} recorded events</div>
             </div>
-            <Timeline events={events} />
+            {events.length > 0 ? <Timeline events={events} /> : (
+              <div className="text-xs text-muted-foreground py-4 text-center">No events recorded yet.</div>
+            )}
           </div>
         </div>
 
         <div className="space-y-4">
-          {s.driver && (
-            <div className="card-elevated p-5">
-              <div className="text-xs uppercase tracking-widest text-muted-foreground">Delivery partner</div>
-              <div className="mt-3 flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-primary text-primary-foreground grid place-items-center font-semibold">
-                  {s.driver.split(" ").map((w: string) => w[0]).join("")}
-                </div>
-                <div>
-                  <div className="font-medium">{s.driver}</div>
-                  <div className="text-xs text-muted-foreground">★ 4.9 · 812 deliveries</div>
-                </div>
+          <div className="card-elevated p-5 text-center space-y-2">
+            {s.assignedAgentId ? (
+              <>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground">Delivery partner</div>
+                <div className="font-medium text-sm">Agent assigned</div>
+                <p className="text-xs text-muted-foreground">A delivery partner has been assigned to your shipment.</p>
+              </>
+            ) : (
+              <>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground">Delivery partner</div>
+                <div className="font-medium text-sm text-muted-foreground">Not yet assigned</div>
+              </>
+            )}
+          </div>
+
+          {s.priority !== "normal" && (
+            <div className="card-elevated p-5 bg-muted/40">
+              <div className="flex items-center gap-2 text-xs font-medium text-primary">
+                <Sparkles className="h-3.5 w-3.5" /> Priority handling
               </div>
-              <div className="mt-3 text-xs text-muted-foreground">{s.vehicle}</div>
-              <div className="mt-3 text-xs text-muted-foreground">{s.driverPhone}</div>
-              <div className="mt-3 flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1 gap-1.5"><Phone className="h-3.5 w-3.5" /> Call</Button>
-                <Button size="sm" className="flex-1 gap-1.5"><MessageSquare className="h-3.5 w-3.5" /> Chat</Button>
+              <div className="mt-3 text-xs text-muted-foreground">
+                This shipment is flagged <strong className="text-foreground capitalize">{s.priority}</strong> priority
+                {s.packageType === "medical" ? " (medical package — automatically escalated)" : ""}, so it receives dispatch
+                priority at hubs and shorter target delivery windows.
               </div>
             </div>
           )}
 
-          <div className="card-elevated p-5 bg-muted/40">
-            <div className="flex items-center gap-2 text-xs font-medium text-primary">
-              <Sparkles className="h-3.5 w-3.5" /> AI ETA engine
-            </div>
-            <div className="mt-3 space-y-2 text-xs">
-              <Row l="Live traffic" v="+6 min" />
-              <Row l="Weather (light rain)" v="+3 min" />
-              <Row l="Elevator wait (14F)" v="+2 min" />
-              <Row l="Driver workload" v="Optimal" ok />
-              <Row l="Confidence" v="96%" ok />
-            </div>
-          </div>
-
           <div className="card-elevated p-5">
             <div className="text-sm font-medium flex items-center gap-2"><Camera className="h-4 w-4" /> Proof of delivery</div>
             <div className="mt-3 rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
-              Photo & signature will appear here once delivered.
+              {s.status === "delivered" ? "Delivered — OTP verified at drop-off." : "Will appear here once delivered."}
             </div>
           </div>
         </div>
@@ -168,15 +163,7 @@ function Fact({ k, v }: { k: string; v: string }) {
   return (
     <div className="card-elevated p-4">
       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{k}</div>
-      <div className="text-sm font-medium mt-1">{v}</div>
-    </div>
-  );
-}
-function Row({ l, v, ok }: { l: string; v: string; ok?: boolean }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted-foreground">{l}</span>
-      <span className={`font-medium ${ok ? "text-success" : ""}`}>{v}</span>
+      <div className="text-sm font-medium mt-1 capitalize">{v}</div>
     </div>
   );
 }
