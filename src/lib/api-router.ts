@@ -60,6 +60,11 @@ const createShipmentSchema = z.object({
   priority: z.enum(["normal", "high", "critical"]).default("normal"),
   insured: z.boolean().default(false),
   declaredValue: z.number().nonnegative().optional(),
+  // REQ-2.4: elderly-care recipients get the same critical-delivery
+  // prioritization as medical packages, independent of packageType.
+  elderlyCare: z.boolean().default(false),
+  // REQ-4.1: optional customer-requested pickup date.
+  pickupDate: z.string().datetime().optional(),
 });
 
 const STATUS_FLOW = [
@@ -185,8 +190,8 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       }
       const input = parsed.data;
 
-      const priority =
-        input.packageType === "medical" && input.priority === "normal" ? "high" : input.priority;
+      const isTimeCritical = input.packageType === "medical" || input.elderlyCare;
+      const priority = isTimeCritical && input.priority === "normal" ? "high" : input.priority;
 
       const cost = calculateShipmentCost({ ...input, priority });
       const trackingId = generateTrackingId();
@@ -207,6 +212,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
           trackingId,
           customerId: user.id,
           ...input,
+          pickupDate: input.pickupDate ? new Date(input.pickupDate) : undefined,
           priority,
           cost,
           distanceKm,
@@ -583,6 +589,22 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       if (!requireRole(user, ["hub_staff", "admin"])) return json({ error: "Not authorized" }, 403);
       const created = await detectExceptions();
       return json({ created });
+    }
+
+    // GET /api/cron/detect-exceptions — REQ-7.4: the system shall
+    // *automatically* monitor for unusual situations and alert admins
+    // proactively, not only when a staff member happens to click a button.
+    // Vercel Cron calls this on a schedule (see vercel.json) with a bearer
+    // secret instead of a user session, since there's no logged-in staff
+    // member behind a scheduled job.
+    if (parts[1] === "cron" && parts[2] === "detect-exceptions" && request.method === "GET") {
+      const authHeader = request.headers.get("authorization");
+      const secret = process.env.CRON_SECRET;
+      if (!secret || authHeader !== `Bearer ${secret}`) {
+        return json({ error: "Not authorized" }, 401);
+      }
+      const created = await detectExceptions();
+      return json({ created, ranAt: new Date().toISOString() });
     }
 
     if (parts[1] === "exceptions" && parts[3] === "resolve" && request.method === "PATCH") {

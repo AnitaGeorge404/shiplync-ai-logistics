@@ -193,6 +193,12 @@ export const shipments = pgTable(
     priority: priorityEnum("priority").notNull().default("normal"),
     insured: boolean("insured").notNull().default(false),
     declaredValue: doublePrecision("declared_value"),
+    // REQ-2.4: critical delivery prioritization for medical AND elderly-care
+    // packages — a distinct flag from packageType since the recipient (not
+    // the parcel) is what makes an elderly-care shipment time-critical.
+    elderlyCare: boolean("elderly_care").notNull().default(false),
+    // REQ-4.1: scheduling of shipment pickups.
+    pickupDate: timestamp("pickup_date"),
 
     // Real distance-based ETA inputs (SRS "dynamic estimated delivery").
     distanceKm: doublePrecision("distance_km"),

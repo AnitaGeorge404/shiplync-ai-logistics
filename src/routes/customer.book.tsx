@@ -50,6 +50,8 @@ function BookShipment() {
 
   const [pkg, setPkg] = useState<"standard" | "express" | "medical" | "fragile">("standard");
   const [insurance, setInsurance] = useState(false);
+  const [elderlyCare, setElderlyCare] = useState(false);
+  const [pickupDate, setPickupDate] = useState("");
   const [weight, setWeight] = useState("");
   const [length, setLength] = useState("");
   const [width, setWidth] = useState("");
@@ -60,9 +62,10 @@ function BookShipment() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [booked, setBooked] = useState<{ trackingId: string; cost: number; id: string } | null>(null);
 
-  // Priority is auto-escalated for medical packages, same rule the server
-  // enforces — the preview always matches what actually gets booked.
-  const priority = pkg === "medical" ? "high" : "normal";
+  // Priority is auto-escalated for medical packages and elderly-care
+  // recipients (REQ-2.4), same rule the server enforces — the preview
+  // always matches what actually gets booked.
+  const priority = pkg === "medical" || elderlyCare ? "high" : "normal";
 
   const weightNum = parseFloat(weight) || 0;
   const lengthNum = parseFloat(length) || 0;
@@ -189,6 +192,8 @@ function BookShipment() {
           priority,
           insured: insurance,
           declaredValue: insurance ? 50000 : undefined,
+          elderlyCare,
+          pickupDate: pickupDate ? new Date(pickupDate).toISOString() : undefined,
         }),
       });
       const data = await res.json();
@@ -307,6 +312,24 @@ function BookShipment() {
                   <div className="text-xs text-muted-foreground">Up to ₹50,000 replacement · 1.5% of declared value</div>
                 </div>
                 <Switch checked={insurance} onCheckedChange={setInsurance} />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <div className="text-sm font-medium">Elderly care recipient</div>
+                  <div className="text-xs text-muted-foreground">Recipient is elderly or needs priority delivery — gets the same fast-lane routing as medical shipments</div>
+                </div>
+                <Switch checked={elderlyCare} onCheckedChange={setElderlyCare} />
+              </div>
+              <div className="rounded-lg border p-3">
+                <Label htmlFor="pickup-date" className="text-sm font-medium">Requested pickup date (optional)</Label>
+                <Input
+                  id="pickup-date"
+                  type="date"
+                  className="mt-2"
+                  min={new Date().toISOString().slice(0, 10)}
+                  value={pickupDate}
+                  onChange={(e) => setPickupDate(e.target.value)}
+                />
               </div>
             </div>
           )}
