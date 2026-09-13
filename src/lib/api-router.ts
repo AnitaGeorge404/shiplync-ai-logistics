@@ -291,6 +291,10 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       const [existing] = await db.select().from(shipments).where(eq(shipments.id, shipmentId)).limit(1);
       if (!existing) return json({ error: "Shipment not found" }, 404);
 
+      if ((user as any).role === "delivery_agent" && existing.assignedAgentId !== user!.id) {
+        return json({ error: "Not authorized — this shipment isn't assigned to you" }, 403);
+      }
+
       const updates: Record<string, unknown> = {
         status: parsed.data.status,
         updatedAt: new Date(),
@@ -378,6 +382,10 @@ export async function handleApiRequest(request: Request): Promise<Response> {
 
       const [existing] = await db.select().from(shipments).where(eq(shipments.id, shipmentId)).limit(1);
       if (!existing) return json({ error: "Shipment not found" }, 404);
+
+      if ((user as any).role === "delivery_agent" && existing.assignedAgentId !== user!.id) {
+        return json({ error: "Not authorized — this shipment isn't assigned to you" }, 403);
+      }
 
       const priorAttempts = await db
         .select()
