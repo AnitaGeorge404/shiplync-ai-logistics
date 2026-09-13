@@ -2,8 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { StatCard } from "@/components/shiplync/StatCard";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { hubs as mockHubs } from "@/lib/mock-data";
-import { useShipments, useExceptions, useAgents } from "@/lib/api-hooks";
+import { useShipments, useExceptions, useAgents, useHubs } from "@/lib/api-hooks";
 import { PackageCheck, PackageOpen, Truck, AlertTriangle, HeartPulse, ScanLine, ArrowRightLeft, UserCheck, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/hub/")({
@@ -14,6 +13,7 @@ export function HubDashboard() {
   const { data: hubShipments = [] } = useShipments("hub");
   const { data: exceptions = [] } = useExceptions();
   const { data: agents = [] } = useAgents();
+  const { data: allHubs = [] } = useHubs();
 
   const incoming = hubShipments.filter((s: any) => ["booked", "payment_completed", "picked_up", "in_transit"].includes(s.status));
   const dispatchQueue = hubShipments.filter((s: any) => ["arrived_hub", "out_for_delivery"].includes(s.status));
@@ -103,13 +103,14 @@ export function HubDashboard() {
           <div className="font-display font-semibold">Hub load balancing</div>
           <div className="text-xs text-muted-foreground">Redirecting shipments when neighboring hubs are congested</div>
           <div className="mt-4 space-y-3">
-            {mockHubs.map((h) => (
-              <div key={h.code}>
+            {allHubs.length === 0 && <div className="text-xs text-muted-foreground">No hubs registered yet.</div>}
+            {allHubs.map((h: any) => (
+              <div key={h.id}>
                 <div className="flex items-center justify-between text-xs">
                   <div className="font-medium">{h.code} <span className="text-muted-foreground font-normal">· {h.city}</span></div>
-                  <div className={`font-mono ${h.load > 85 ? "text-destructive" : h.load > 75 ? "text-warning-foreground" : "text-muted-foreground"}`}>{h.load}%</div>
+                  <div className={`font-mono ${h.loadPct > 85 ? "text-destructive" : h.loadPct > 75 ? "text-warning-foreground" : "text-muted-foreground"}`}>{h.loadPct}%</div>
                 </div>
-                <Progress value={h.load} className="h-1.5 mt-1" />
+                <Progress value={h.loadPct} className="h-1.5 mt-1" />
               </div>
             ))}
           </div>

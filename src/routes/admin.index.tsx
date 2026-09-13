@@ -1,13 +1,37 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMemo } from "react";
 import { StatCard } from "@/components/shiplync/StatCard";
-import { analytics, hubs } from "@/lib/mock-data";
-import { useAdminStats, useShipments, useNotifications } from "@/lib/api-hooks";
-import { StatusBadge } from "@/components/shiplync/StatusBadge";
-import { Progress } from "@/components/ui/progress";
+import { useAdminStats, useShipments, useNotifications, useHubs, useVehicles, useExceptions } from "@/lib/api-hooks";
 import { Button } from "@/components/ui/button";
-import { Package, Truck, CheckCircle2, AlertTriangle, HeartPulse, Timer, Warehouse, IndianRupee, Sparkles, Leaf, TrendingUp } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis,
+  Package,
+  Truck,
+  CheckCircle2,
+  AlertTriangle,
+  HeartPulse,
+  Timer,
+  Warehouse,
+  IndianRupee,
+  Sparkles,
+  TrendingUp,
+  ShieldAlert,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+  YAxis,
 } from "recharts";
 
 export const Route = createFileRoute("/admin/")({
@@ -22,31 +46,59 @@ const CHART_COLORS = [
   "oklch(0.62 0.24 15)",
 ];
 
-// Fleet plotted as glowing dots on a stylized India silhouette
-const fleetDots = [
-  { x: 22, y: 32, v: "EV Van" },
-  { x: 35, y: 55, v: "Truck" },
-  { x: 48, y: 66, v: "Bike" },
-  { x: 55, y: 78, v: "EV Van" },
-  { x: 68, y: 60, v: "Truck" },
-  { x: 74, y: 44, v: "Bike" },
-  { x: 42, y: 40, v: "EV Van" },
-  { x: 30, y: 72, v: "Bike" },
-  { x: 60, y: 84, v: "Truck" },
-  { x: 80, y: 72, v: "EV Van" },
-  { x: 52, y: 25, v: "Truck" },
-  { x: 66, y: 18, v: "Bike" },
-];
+function useRealDashboardCharts(shipments: any[]) {
+  return useMemo(() => {
+    const byDay = new Map<string, { shipments: number; delivered: number }>();
+    const byType = new Map<string, number>();
+    const byPriority = new Map<string, number>();
+    let predictedHoursSum = 0;
+    let actualHoursSum = 0;
+    let deliveredWithBothCount = 0;
+
+    for (const s of shipments) {
+      const day = new Date(s.createdAt).toLocaleDateString("en-IN", { weekday: "short" });
+      const dayEntry = byDay.get(day) ?? { shipments: 0, delivered: 0 };
+      dayEntry.shipments += 1;
+      if (s.status === "delivered") dayEntry.delivered += 1;
+      byDay.set(day, dayEntry);
+
+      byType.set(s.packageType, (byType.get(s.packageType) ?? 0) + 1);
+      byPriority.set(s.priority, (byPriority.get(s.priority) ?? 0) + 1);
+
+      if (s.status === "delivered" && s.deliveredAt && s.estimatedDeliveryAt) {
+        const created = new Date(s.createdAt).getTime();
+        const predicted = (new Date(s.estimatedDeliveryAt).getTime() - created) / 36e5;
+        const actual = (new Date(s.deliveredAt).getTime() - created) / 36e5;
+        predictedHoursSum += predicted;
+        actualHoursSum += actual;
+        deliveredWithBothCount += 1;
+      }
+    }
+
+    const volume = Array.from(byDay.entries()).map(([day, v]) => ({ day, ...v }));
+    const categoryMix = Array.from(byType.entries()).map(([name, value]) => ({ name, value }));
+    const priorityMix = Array.from(byPriority.entries()).map(([name, value]) => ({ name, value }));
+    const avgPredictedHrs = deliveredWithBothCount > 0 ? Math.round((predictedHoursSum / deliveredWithBothCount) * 10) / 10 : 0;
+    const avgActualHrs = deliveredWithBothCount > 0 ? Math.round((actualHoursSum / deliveredWithBothCount) * 10) / 10 : 0;
+
+    return { volume, categoryMix, priorityMix, avgPredictedHrs, avgActualHrs, deliveredWithBothCount };
+  }, [shipments]);
+}
 
 function AdminDashboard() {
   const { data: stats } = useAdminStats();
   const { data: allShipments = [] } = useShipments("all");
   const { data: liveNotifications = [] } = useNotifications();
+  const { data: allHubs = [] } = useHubs();
+  const { data: allVehicles = [] } = useVehicles();
+  const { data: exceptions = [] } = useExceptions();
+  const { volume, categoryMix, priorityMix, avgPredictedHrs, avgActualHrs, deliveredWithBothCount } = useRealDashboardCharts(allShipments);
+
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">Command center · Nationwide</div>
+          <div className="text-xs uppercase tracking-widest text-muted-foreground">Command center</div>
           <h1 className="font-display text-3xl font-semibold mt-1">Everything moves. All at once.</h1>
         </div>
         <div className="flex items-center gap-2">
@@ -72,63 +124,50 @@ function AdminDashboard() {
         <div className="lg:col-span-2 card-elevated p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <div className="font-display font-semibold">Nationwide fleet</div>
-              <div className="text-xs text-muted-foreground">214 vehicles · updated every 15s</div>
-            </div>
-            <div className="flex gap-4 text-xs">
-              <Legend2 c="oklch(0.52 0.19 258)" l="In transit" />
-              <Legend2 c="oklch(0.72 0.13 195)" l="At hub" />
-              <Legend2 c="oklch(0.62 0.24 15)" l="Exception" />
+              <div className="font-display font-semibold">Hubs & fleet</div>
+              <div className="text-xs text-muted-foreground">
+                {allHubs.length} hub{allHubs.length === 1 ? "" : "s"} · {allVehicles.length} vehicle{allVehicles.length === 1 ? "" : "s"} — real counts, no live GPS feed is connected
+              </div>
             </div>
           </div>
-          <div className="relative rounded-xl border overflow-hidden bg-card h-96">
-            <div className="absolute inset-0 grid-pattern opacity-40" />
-            <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
-              <defs>
-                <radialGradient id="cityGlow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="oklch(0.52 0.19 258 / 0.6)" />
-                  <stop offset="100%" stopColor="oklch(0.52 0.19 258 / 0)" />
-                </radialGradient>
-              </defs>
-              <path
-                d="M 30 8 L 68 8 L 82 24 L 88 48 L 82 68 L 62 92 L 52 96 L 44 92 L 30 78 L 18 60 L 14 40 L 22 22 Z"
-                fill="var(--card)"
-                stroke="var(--border)"
-                strokeWidth="0.4"
-              />
-              {[["Delhi", 42, 22], ["Mumbai", 28, 58], ["Bengaluru", 46, 82], ["Chennai", 58, 84], ["Hyderabad", 50, 66], ["Kolkata", 74, 46]].map(([n, x, y]) => (
-                <g key={n as string}>
-                  <circle cx={x as number} cy={y as number} r="6" fill="url(#cityGlow)" />
-                  <circle cx={x as number} cy={y as number} r="1.4" fill="oklch(0.52 0.19 258)" />
-                  <text x={(x as number) + 2.4} y={(y as number) + 0.8} fontSize="2.2" fill="var(--muted-foreground)">{n as string}</text>
-                </g>
-              ))}
-              {fleetDots.map((d, i) => (
-                <circle key={i} cx={d.x} cy={d.y} r="0.7" fill={i % 5 === 0 ? "oklch(0.62 0.24 15)" : i % 3 === 0 ? "oklch(0.72 0.13 195)" : "oklch(0.52 0.19 258)"}>
-                  <animate attributeName="opacity" values="0.4;1;0.4" dur={`${2 + (i % 4) * 0.4}s`} repeatCount="indefinite" />
-                </circle>
-              ))}
-            </svg>
-            <div className="absolute bottom-3 left-3 glass rounded-lg px-3 py-2 text-[11px]">
-              <div className="font-medium">Delivery density heatmap</div>
-              <div className="text-muted-foreground">Higher demand · Mumbai · Bengaluru · Delhi</div>
-            </div>
+          <div className="space-y-3">
+            {allHubs.length === 0 && <div className="text-xs text-muted-foreground py-6 text-center">No hubs registered yet.</div>}
+            {allHubs.map((h: any) => (
+              <div key={h.id}>
+                <div className="flex items-center justify-between text-xs">
+                  <div className="font-medium">{h.code} <span className="text-muted-foreground font-normal">· {h.name}, {h.city}</span></div>
+                  <div className={`font-mono ${h.loadPct > 85 ? "text-destructive" : h.loadPct > 75 ? "text-warning-foreground" : "text-muted-foreground"}`}>
+                    {h.activeShipmentCount} active · {h.loadPct}%
+                  </div>
+                </div>
+                <Progress value={h.loadPct} className="h-1.5 mt-1" />
+              </div>
+            ))}
           </div>
         </div>
 
         <div className="card-elevated p-5 bg-muted/40">
-          <div className="flex items-center gap-2 text-xs font-medium text-primary"><Sparkles className="h-3.5 w-3.5" /> AI insights · today</div>
-          <ul className="mt-4 space-y-3 text-sm">
-            <Insight t="Reroute 40 packages BOM → PUN" d="Save 42 min · avoid Andheri jam" tone="primary" />
-            <Insight t="Shift 3 EV vans to BLR-South" d="Handles surge from 6–9 PM · +18% capacity" tone="accent" />
-            <Insight t="Reassign 5 medical drops" d="Anita Sharma on-shift; dedicated lane" tone="medical" />
-            <Insight t="Predicted failed deliveries: 24" d="Recipients unlikely home · nudge reschedule" tone="warning" />
-          </ul>
+          <div className="flex items-center gap-2 text-xs font-medium text-primary"><ShieldAlert className="h-3.5 w-3.5" /> Open exceptions</div>
+          {exceptions.length === 0 ? (
+            <div className="mt-4 text-xs text-muted-foreground">No open exceptions detected. Run detection from Admin → Exceptions.</div>
+          ) : (
+            <ul className="mt-4 space-y-3 text-sm">
+              {exceptions.slice(0, 4).map((e: any) => (
+                <li key={e.id} className="flex items-start gap-2.5">
+                  <span className={`h-1.5 w-1.5 rounded-full mt-2 ${e.severity === "critical" ? "bg-destructive" : e.severity === "warning" ? "bg-warning" : "bg-primary"}`} />
+                  <div>
+                    <div className="font-medium capitalize">{e.type.replace(/_/g, " ")}</div>
+                    <div className="text-xs text-muted-foreground">{e.message}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-3 text-xs">
-            <Mini l="Time saved by AI" v="14.2 hrs" />
-            <Mini l="Fuel saved" v="182 L" />
-            <Mini l="CO₂ reduced" v="412 kg" />
-            <Mini l="Route efficiency" v="94.6%" />
+            <Mini l="Open exceptions" v={String(exceptions.length)} />
+            <Mini l="Critical" v={String(exceptions.filter((e: any) => e.severity === "critical").length)} />
+            <Mini l="Delivered (30d sample)" v={String(deliveredWithBothCount)} />
+            <Mini l="Avg predicted ETA" v={`${avgPredictedHrs}h`} />
           </div>
         </div>
       </div>
@@ -137,14 +176,14 @@ function AdminDashboard() {
         <div className="lg:col-span-2 card-elevated p-5">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <div className="font-display font-semibold">Volume trend · last 7 days</div>
-              <div className="text-xs text-muted-foreground">Shipments booked vs delivered</div>
+              <div className="font-display font-semibold">Volume trend</div>
+              <div className="text-xs text-muted-foreground">Shipments booked vs delivered, by day (real data)</div>
             </div>
-            <div className="flex items-center gap-1 text-xs text-success"><TrendingUp className="h-3.5 w-3.5" /> +12.4%</div>
+            <div className="flex items-center gap-1 text-xs text-success"><TrendingUp className="h-3.5 w-3.5" /> Live</div>
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={analytics.volume} margin={{ top: 20, right: 8, bottom: 0, left: 0 }}>
+              <AreaChart data={volume} margin={{ top: 20, right: 8, bottom: 0, left: 0 }}>
                 <defs>
                   <linearGradient id="a1" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="oklch(0.52 0.19 258)" stopOpacity={0.4} />
@@ -168,23 +207,23 @@ function AdminDashboard() {
 
         <div className="card-elevated p-5">
           <div className="font-display font-semibold">Package mix</div>
-          <div className="text-xs text-muted-foreground">Distribution by category</div>
+          <div className="text-xs text-muted-foreground">Distribution by category (real data)</div>
           <div className="h-56 mt-2">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={analytics.categoryMix} dataKey="value" innerRadius={45} outerRadius={80} paddingAngle={4}>
-                  {analytics.categoryMix.map((_, i) => (<Cell key={i} fill={CHART_COLORS[i]} />))}
+                <Pie data={categoryMix} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={4}>
+                  {categoryMix.map((_, i) => (<Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />))}
                 </Pie>
                 <RTooltip contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--card)" }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
           <div className="grid grid-cols-2 gap-2 mt-2">
-            {analytics.categoryMix.map((c, i) => (
+            {categoryMix.map((c, i) => (
               <div key={c.name} className="flex items-center gap-2 text-xs">
-                <span className="h-2 w-2 rounded-full" style={{ background: CHART_COLORS[i] }} />
-                <span className="flex-1">{c.name}</span>
-                <span className="text-muted-foreground">{c.value}%</span>
+                <span className="h-2 w-2 rounded-full" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                <span className="flex-1 capitalize">{c.name}</span>
+                <span className="text-muted-foreground">{c.value}</span>
               </div>
             ))}
           </div>
@@ -194,15 +233,16 @@ function AdminDashboard() {
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="card-elevated p-5">
           <div className="font-display font-semibold flex items-center gap-2"><Warehouse className="h-4 w-4" /> Hub utilization</div>
-          <div className="text-xs text-muted-foreground">Live queue depth</div>
+          <div className="text-xs text-muted-foreground">Active shipments vs capacity (real data)</div>
           <div className="mt-4 space-y-3">
-            {hubs.map((h) => (
-              <div key={h.code}>
+            {allHubs.length === 0 && <div className="text-xs text-muted-foreground">No hubs registered yet.</div>}
+            {allHubs.map((h: any) => (
+              <div key={h.id}>
                 <div className="flex items-center justify-between text-xs">
                   <div className="font-medium">{h.code}<span className="text-muted-foreground font-normal"> · {h.city}</span></div>
-                  <div className={`font-mono ${h.load > 85 ? "text-destructive" : h.load > 75 ? "text-warning-foreground" : "text-muted-foreground"}`}>{h.load}%</div>
+                  <div className={`font-mono ${h.loadPct > 85 ? "text-destructive" : h.loadPct > 75 ? "text-warning-foreground" : "text-muted-foreground"}`}>{h.loadPct}%</div>
                 </div>
-                <Progress value={h.load} className="h-1.5 mt-1" />
+                <Progress value={h.loadPct} className="h-1.5 mt-1" />
               </div>
             ))}
           </div>
@@ -210,32 +250,35 @@ function AdminDashboard() {
 
         <div className="card-elevated p-5">
           <div className="font-display font-semibold flex items-center gap-2"><Timer className="h-4 w-4" /> ETA accuracy</div>
-          <div className="text-xs text-muted-foreground">Actual vs predicted (min)</div>
+          <div className="text-xs text-muted-foreground">
+            {deliveredWithBothCount > 0
+              ? `Avg predicted ${avgPredictedHrs}h vs actual ${avgActualHrs}h, across ${deliveredWithBothCount} delivered shipments`
+              : "No delivered shipments with both an ETA and delivery time yet"}
+          </div>
           <div className="h-56 mt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={analytics.eta}>
+              <LineChart data={volume}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="hour" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
                 <RTooltip contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--card)" }} />
-                <Line type="monotone" dataKey="predicted" stroke="oklch(0.72 0.13 195)" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="actual" stroke="oklch(0.52 0.19 258)" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="delivered" name="Delivered" stroke="oklch(0.52 0.19 258)" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         <div className="card-elevated p-5">
-          <div className="font-display font-semibold flex items-center gap-2"><Leaf className="h-4 w-4 text-success" /> Sustainability</div>
-          <div className="text-xs text-muted-foreground">Emissions saved this quarter</div>
+          <div className="font-display font-semibold flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> Priority mix</div>
+          <div className="text-xs text-muted-foreground">Shipments by priority tier (real data)</div>
           <div className="h-56 mt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={analytics.volume}>
+              <BarChart data={priorityMix}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
                 <RTooltip contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--card)" }} />
-                <Bar dataKey="delivered" fill="oklch(0.68 0.16 155)" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="value" fill="oklch(0.68 0.16 155)" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -247,7 +290,7 @@ function AdminDashboard() {
           <div className="px-5 py-4 border-b flex items-center justify-between">
             <div>
               <div className="font-display font-semibold">Live shipment feed</div>
-              <div className="text-xs text-muted-foreground">Priority sorted · updated every 15s</div>
+              <div className="text-xs text-muted-foreground">Real data, most recent first</div>
             </div>
           </div>
           <div className="divide-y">
@@ -269,7 +312,7 @@ function AdminDashboard() {
 
         <div className="card-elevated p-5">
           <div className="font-display font-semibold">Notifications</div>
-          <div className="text-xs text-muted-foreground">Real-time system events</div>
+          <div className="text-xs text-muted-foreground">Real, event-driven notifications for this account</div>
           <ul className="mt-4 space-y-3">
             {liveNotifications.length === 0 && <div className="text-xs text-muted-foreground">No notifications yet.</div>}
             {liveNotifications.slice(0, 8).map((n: any) => (
@@ -296,26 +339,6 @@ function AdminDashboard() {
   );
 }
 
-function Legend2({ c, l }: { c: string; l: string }) {
-  return (
-    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span className="h-2 w-2 rounded-full" style={{ background: c }} />
-      {l}
-    </div>
-  );
-}
-function Insight({ t, d, tone }: { t: string; d: string; tone: "primary" | "accent" | "warning" | "medical" }) {
-  const bg = tone === "primary" ? "bg-primary" : tone === "accent" ? "bg-accent" : tone === "warning" ? "bg-warning" : "bg-medical";
-  return (
-    <li className="flex items-start gap-2.5">
-      <span className={`h-1.5 w-1.5 rounded-full mt-2 ${bg}`} />
-      <div>
-        <div className="font-medium">{t}</div>
-        <div className="text-xs text-muted-foreground">{d}</div>
-      </div>
-    </li>
-  );
-}
 function Mini({ l, v }: { l: string; v: string }) {
   return (
     <div className="rounded-lg border bg-card p-2.5">
