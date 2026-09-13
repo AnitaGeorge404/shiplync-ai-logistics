@@ -110,6 +110,34 @@ function HubDispatchPage() {
     }
   }
 
+  // REQ-6.2 / REQ-6.3: a failed delivery attempt previously had no action
+  // anywhere in any portal — the shipment sat at "delivery_attempted"
+  // forever. These give hub staff the two real next steps the state
+  // machine already allows (ALLOWED_TRANSITIONS in api-router.ts) but that
+  // no UI ever exposed.
+  async function resolveFailedAttempt(shipmentId: string, nextStatus: "out_for_delivery" | "returned") {
+    setBusyId(shipmentId);
+    try {
+      const res = await fetch(`/api/shipments/${shipmentId}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: nextStatus,
+          note: nextStatus === "out_for_delivery" ? "Rescheduled for redelivery from hub." : "Returned to sender after failed delivery.",
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Could not update shipment");
+        return;
+      }
+      toast.success(nextStatus === "out_for_delivery" ? "Rescheduled for redelivery" : "Marked returned to sender");
+      queryClient.invalidateQueries({ queryKey: ["shipments", "hub"] });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-5">
@@ -169,7 +197,9 @@ function HubDispatchPage() {
             <SelectItem value="ALL">All statuses</SelectItem>
             <SelectItem value="arrived_hub">Arrived at hub</SelectItem>
             <SelectItem value="out_for_delivery">Out for delivery</SelectItem>
+            <SelectItem value="delivery_attempted">Failed attempt</SelectItem>
             <SelectItem value="delivered">Delivered</SelectItem>
+            <SelectItem value="returned">Returned</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -262,9 +292,31 @@ function HubDispatchPage() {
                         Dispatch
                       </Button>
                     )}
-                    {(s.status === "out_for_delivery" || s.status === "delivered") && (
+                    {s.status === "delivery_attempted" && (
+                      <div className="flex justify-end items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs"
+                          disabled={busyId === s.id}
+                          onClick={() => resolveFailedAttempt(s.id, "out_for_delivery")}
+                        >
+                          Reschedule
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="h-8 text-xs"
+                          disabled={busyId === s.id}
+                          onClick={() => resolveFailedAttempt(s.id, "returned")}
+                        >
+                          Return to sender
+                        </Button>
+                      </div>
+                    )}
+                    {(s.status === "out_for_delivery" || s.status === "delivered" || s.status === "returned") && (
                       <Badge variant="outline" className="font-normal text-[11px]">
-                        {s.status === "delivered" ? "Delivered" : "Dispatched"}
+                        {s.status === "delivered" ? "Delivered" : s.status === "returned" ? "Returned" : "Dispatched"}
                       </Badge>
                     )}
                   </TableCell>
