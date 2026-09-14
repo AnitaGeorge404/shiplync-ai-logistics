@@ -2,6 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { RouteMap } from "@/components/shiplync/RouteMap";
 import { Timeline } from "@/components/shiplync/Timeline";
+import { Barcode } from "@/components/shiplync/Barcode";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck, Camera, Sparkles, ArrowLeft, Share2 } from "lucide-react";
 import { toast } from "sonner";
@@ -94,6 +95,11 @@ function TrackShipment() {
             <Share2 className="h-3.5 w-3.5" /> Share
           </Button>
         </div>
+      </div>
+
+      <div className="card-elevated p-4 flex items-center justify-between flex-wrap gap-3">
+        <div className="text-xs text-muted-foreground">Shipping label barcode — scanned at hub intake (REQ-5.3)</div>
+        <Barcode value={s.trackingId} height={48} />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">

@@ -199,6 +199,12 @@ export const shipments = pgTable(
     elderlyCare: boolean("elderly_care").notNull().default(false),
     // REQ-4.1: scheduling of shipment pickups.
     pickupDate: timestamp("pickup_date"),
+    // REQ-3.4: real last-mile ETA inputs at the receiver's address — floors
+    // to climb (no elevator assumed) and a building security checkpoint,
+    // the two concrete factors the SRS names. Nullable/false by default
+    // since most addresses are ground-floor with no checkpoint.
+    receiverFloorCount: integer("receiver_floor_count").notNull().default(0),
+    receiverHasSecurityCheckpoint: boolean("receiver_has_security_checkpoint").notNull().default(false),
 
     // Real distance-based ETA inputs (SRS "dynamic estimated delivery").
     distanceKm: doublePrecision("distance_km"),

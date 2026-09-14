@@ -23,6 +23,7 @@ import {
   Box,
 } from "lucide-react";
 import { toast } from "sonner";
+import { BarcodeScanner } from "@/components/shiplync/BarcodeScanner";
 
 export const Route = createFileRoute("/hub/intake")({
   head: () => ({
@@ -63,11 +64,15 @@ function HubIntakePage() {
 
   async function scanIntake(e: React.FormEvent) {
     e.preventDefault();
-    if (!code.trim()) return;
+    await submitScan(code);
+  }
+
+  async function submitScan(rawCode: string) {
+    if (!rawCode.trim()) return;
     setBusy(true);
     setError(null);
     try {
-      const lookup = await fetch(`/api/shipments/track/${encodeURIComponent(code.trim())}`);
+      const lookup = await fetch(`/api/shipments/track/${encodeURIComponent(rawCode.trim())}`);
       const lookupData = await lookup.json();
       if (!lookup.ok) {
         setError(lookupData.error || "Tracking ID not found in database.");
@@ -156,6 +161,12 @@ function HubIntakePage() {
               <ScanLine className="h-4 w-4" /> {busy ? "Scanning..." : "Scan"}
             </Button>
           </form>
+          <BarcodeScanner
+            onDetected={(text) => {
+              setCode(text);
+              submitScan(text);
+            }}
+          />
           {error && <div className="text-xs text-destructive">{error}</div>}
         </div>
 
