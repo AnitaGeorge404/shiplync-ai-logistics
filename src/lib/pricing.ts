@@ -67,10 +67,21 @@ const MIN_HOURS_BY_PRIORITY: Record<string, number> = {
   normal: 20,
 };
 
+// REQ-3.4: "accounting for factors like stairs, security, and potential
+// delays" — real last-mile friction at the receiver's own address, applied
+// on top of the network transit estimate above (these don't get faster
+// just because the courier's speed tier is higher; a flight of stairs is a
+// flight of stairs). Only counted when the customer actually reports them
+// at booking time — never assumed.
+const MINUTES_PER_FLOOR_NO_ELEVATOR = 4; // carrying a parcel up stairs, no elevator assumed
+const SECURITY_CHECKPOINT_MINUTES = 12; // gated building sign-in / security wait
+
 export function estimateDeliveryHours(input: {
   priority: string;
   packageType: string;
   distanceKm: number;
+  receiverFloorCount?: number;
+  receiverHasSecurityCheckpoint?: boolean;
 }) {
   const priorityKey = input.priority in EFFECTIVE_SPEED_KMH ? input.priority : "normal";
   const hubHours = HUB_PROCESSING_HOURS[priorityKey];
@@ -79,9 +90,13 @@ export function estimateDeliveryHours(input: {
   const minHours = MIN_HOURS_BY_PRIORITY[priorityKey];
 
   const transitHours = Math.max(input.distanceKm, 0) / speedKmh;
-  const totalHours = hubHours + transitHours + handlingHours;
+  const networkHours = Math.max(hubHours + transitHours + handlingHours, minHours);
 
-  return Math.round(Math.max(totalHours, minHours) * 10) / 10;
+  const floorMinutes = Math.max(input.receiverFloorCount ?? 0, 0) * MINUTES_PER_FLOOR_NO_ELEVATOR;
+  const securityMinutes = input.receiverHasSecurityCheckpoint ? SECURITY_CHECKPOINT_MINUTES : 0;
+  const lastMileHours = (floorMinutes + securityMinutes) / 60;
+
+  return Math.round((networkHours + lastMileHours) * 10) / 10;
 }
 
 export function generateTrackingId() {

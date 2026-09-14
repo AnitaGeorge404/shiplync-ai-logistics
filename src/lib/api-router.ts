@@ -65,6 +65,10 @@ const createShipmentSchema = z.object({
   elderlyCare: z.boolean().default(false),
   // REQ-4.1: optional customer-requested pickup date.
   pickupDate: z.string().datetime().optional(),
+  // REQ-3.4: real last-mile ETA inputs — stairs (no elevator) and a
+  // security checkpoint at the receiver's address.
+  receiverFloorCount: z.number().int().min(0).max(200).default(0),
+  receiverHasSecurityCheckpoint: z.boolean().default(false),
 });
 
 const STATUS_FLOW = [
@@ -203,7 +207,13 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         { city: input.senderCity, state: input.senderState },
         { city: input.receiverCity, state: input.receiverState },
       );
-      const etaHours = estimateDeliveryHours({ priority, packageType: input.packageType, distanceKm });
+      const etaHours = estimateDeliveryHours({
+        priority,
+        packageType: input.packageType,
+        distanceKm,
+        receiverFloorCount: input.receiverFloorCount,
+        receiverHasSecurityCheckpoint: input.receiverHasSecurityCheckpoint,
+      });
       const estimatedDeliveryAt = new Date(Date.now() + etaHours * 60 * 60 * 1000);
 
       const [shipment] = await db

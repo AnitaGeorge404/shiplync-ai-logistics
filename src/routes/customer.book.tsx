@@ -52,6 +52,8 @@ function BookShipment() {
   const [insurance, setInsurance] = useState(false);
   const [elderlyCare, setElderlyCare] = useState(false);
   const [pickupDate, setPickupDate] = useState("");
+  const [floorCount, setFloorCount] = useState("");
+  const [hasSecurityCheckpoint, setHasSecurityCheckpoint] = useState(false);
   const [weight, setWeight] = useState("");
   const [length, setLength] = useState("");
   const [width, setWidth] = useState("");
@@ -90,7 +92,14 @@ function BookShipment() {
     );
   }, [sender.city, sender.state, receiver.city, receiver.state]);
 
-  const etaHours = estimateDeliveryHours({ priority, packageType: pkg, distanceKm });
+  const floorCountNum = Math.max(parseInt(floorCount, 10) || 0, 0);
+  const etaHours = estimateDeliveryHours({
+    priority,
+    packageType: pkg,
+    distanceKm,
+    receiverFloorCount: floorCountNum,
+    receiverHasSecurityCheckpoint: hasSecurityCheckpoint,
+  });
   const etaDays = Math.round((etaHours / 24) * 10) / 10;
 
   // "Route optimization" — a real, transparent calculation (not a fake AI
@@ -194,6 +203,8 @@ function BookShipment() {
           declaredValue: insurance ? 50000 : undefined,
           elderlyCare,
           pickupDate: pickupDate ? new Date(pickupDate).toISOString() : undefined,
+          receiverFloorCount: floorCountNum,
+          receiverHasSecurityCheckpoint: hasSecurityCheckpoint,
         }),
       });
       const data = await res.json();
@@ -276,6 +287,25 @@ function BookShipment() {
                 savedAddresses={savedAddresses}
                 onSelectSaved={(id) => applySavedAddress("receiver", id)}
               />
+              <div className="rounded-xl border p-4 space-y-3">
+                <div className="text-sm font-medium">Delivery access details</div>
+                <div className="text-xs text-muted-foreground -mt-2">
+                  These change the ETA — real last-mile time, not a rough guess.
+                </div>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <Field
+                    label="Floors to climb (no lift)"
+                    value={floorCount}
+                    onChange={setFloorCount}
+                    type="number"
+                    placeholder="0"
+                  />
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="text-xs font-medium">Building has a security checkpoint</div>
+                    <Switch checked={hasSecurityCheckpoint} onCheckedChange={setHasSecurityCheckpoint} />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
