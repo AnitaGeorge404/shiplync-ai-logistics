@@ -33,11 +33,18 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   compact = false,
 }) => {
   const { login, loginWithEmail, registerWithEmail } = useAuth();
-  const [activeTab, setActiveTab] = useState<"phone" | "email">("phone");
+  // Email is the only tab that can reach a non-customer role (phone OTP and
+  // social login below always sign in/up as a fresh customer account — see
+  // AuthContext's login()). Defaulting to "phone" here previously meant
+  // anyone landing on /login saw the fake OTP flow first and had no way to
+  // discover the real per-role accounts, so every portal but Customer was
+  // effectively unreachable.
+  const [activeTab, setActiveTab] = useState<"phone" | "email">("email");
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [demoLoadingRole, setDemoLoadingRole] = useState<string | null>(null);
 
   // Phone OTP state
   const [phone, setPhone] = useState("9876543210");
@@ -87,6 +94,37 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     if (onSuccess) onSuccess();
   };
 
+  // Seeded per-role demo accounts (scripts/seed.mjs) — the only way to
+  // reach the Delivery Partner / Hub Operations / Administrator portals
+  // without knowing their real credentials in advance. Uses the real
+  // loginWithEmail path (not the fake phone/social demo login), so the
+  // resulting session has the actual role from the database.
+  const DEMO_ACCOUNTS = [
+    { role: "delivery_agent", label: "Delivery Partner", email: "agent1@shiplync.test" },
+    { role: "hub_staff", label: "Hub Operations", email: "hub1@shiplync.test" },
+    { role: "admin", label: "Administrator", email: "admin1@shiplync.test" },
+  ];
+
+  const handleDemoLogin = async (account: (typeof DEMO_ACCOUNTS)[number]) => {
+    setAuthError(null);
+    setDemoLoadingRole(account.role);
+    const result = await loginWithEmail(account.email, "shiplync-demo-2026");
+    setDemoLoadingRole(null);
+    if (result.error) {
+      setAuthError(`Could not sign in as the ${account.label} demo account: ${result.error}`);
+      return;
+    }
+    if (onSuccess) onSuccess();
+  };
+
+  const handleDemoCustomerLogin = async () => {
+    setAuthError(null);
+    setDemoLoadingRole("customer");
+    await login();
+    setDemoLoadingRole(null);
+    if (onSuccess) onSuccess();
+  };
+
   const handleSocialLogin = (provider: string) => {
     setIsLoading(true);
     setTimeout(() => {
@@ -113,6 +151,45 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           {subtitle}
         </p>
       </div>
+
+      {/* Demo portal quick-login — the phone/social buttons below always
+          sign in as a customer, so this is the only visible way to reach
+          the Delivery Partner / Hub Operations / Administrator portals. */}
+      {mode === "login" && (
+        <div className="mb-6 rounded-xl border p-3 space-y-2">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+            Quick demo login by role
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-xs justify-start"
+              disabled={isLoading || demoLoadingRole !== null}
+              onClick={handleDemoCustomerLogin}
+            >
+              {demoLoadingRole === "customer" ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null} Customer
+            </Button>
+            {DEMO_ACCOUNTS.map((a) => (
+              <Button
+                key={a.role}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-xs justify-start"
+                disabled={isLoading || demoLoadingRole !== null}
+                onClick={() => handleDemoLogin(a)}
+              >
+                {demoLoadingRole === a.role ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null} {a.label}
+              </Button>
+            ))}
+          </div>
+          {authError && (
+            <div className="text-[11px] text-destructive">{authError}</div>
+          )}
+        </div>
+      )}
 
       {/* Mode Switcher Banner */}
       <div className="bg-muted/60 p-1 rounded-xl flex mb-6">
