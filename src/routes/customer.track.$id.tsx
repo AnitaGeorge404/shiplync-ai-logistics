@@ -1,6 +1,8 @@
+import { useState, useEffect } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { RouteMap } from "@/components/shiplync/RouteMap";
+import { LiveDeliveryMap } from "@/components/shiplync/LiveDeliveryMap";
 import { ShipmentMilestones } from "@/components/shiplync/ShipmentMilestones";
 import { Timeline } from "@/components/shiplync/Timeline";
 import { Barcode } from "@/components/shiplync/Barcode";
@@ -8,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toBadgeStatus, toProgress } from "@/lib/api-hooks";
 import { getDeliveryOtp } from "@/lib/otp";
-import { ShieldCheck, Camera, ArrowLeft, Share2, AlertTriangle, RotateCcw, CheckCircle2, XCircle, KeyRound, Copy } from "lucide-react";
+import { ShieldCheck, Camera, ArrowLeft, Share2, AlertTriangle, RotateCcw, CheckCircle2, XCircle, KeyRound, Copy, Map, Compass } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/customer/track/$id")({
@@ -16,7 +18,17 @@ export const Route = createFileRoute("/customer/track/$id")({
     if (typeof window === "undefined") return null; // resolved client-side; see below
     const res = await fetch(`/api/shipments/track/${encodeURIComponent(params.id)}`);
     if (!res.ok) throw notFound();
-    return res.json() as Promise<{ shipment: any; events: any[]; currentHubName: string | null; attempts: any[]; exceptions: any[] }>;
+    return res.json() as Promise<{
+      shipment: any;
+      events: any[];
+      currentHubName: string | null;
+      attempts: any[];
+      exceptions: any[];
+      destinationCoords?: { lat: number; lng: number };
+      originCoords?: { lat: number; lng: number };
+      liveLocation?: any;
+      partner?: any;
+    }>;
   },
   head: ({ loaderData }) => ({
     meta: [
@@ -30,11 +42,91 @@ export const Route = createFileRoute("/customer/track/$id")({
 function TrackShipment() {
   const data = Route.useLoaderData();
 
+  const [liveData, setLiveData] = useState<{
+    liveLocation: any;
+    partner: any;
+    destinationCoords: { lat: number; lng: number };
+    originCoords: { lat: number; lng: number };
+  }>({
+    liveLocation: data?.liveLocation ?? null,
+    partner: data?.partner ?? null,
+    destinationCoords: data?.destinationCoords ?? { lat: 9.5916, lng: 76.5222 },
+    originCoords: data?.originCoords ?? { lat: 9.4678, lng: 76.5412 },
+  });
+
+  const [mapType, setMapType] = useState<"live" | "schematic">("live");
+
+  // Keep liveData in sync if loader finishes resolving
+  useEffect(() => {
+    if (data) {
+      setLiveData({
+        liveLocation: data.liveLocation ?? null,
+        partner: data.partner ?? null,
+        destinationCoords: data.destinationCoords ?? { lat: 9.5916, lng: 76.5222 },
+        originCoords: data.originCoords ?? { lat: 9.4678, lng: 76.5412 },
+      });
+    }
+  }, [data]);
+
+  // Real-time polling every 3 seconds for live partner location updates
+  useEffect(() => {
+    const s = data?.shipment;
+    if (!s || ["delivered", "cancelled", "returned"].includes(s.status)) return;
+
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/shipments/track/${encodeURIComponent(s.trackingId)}/live`);
+        if (res.ok && isMounted) {
+          const json = await res.json();
+          if (json.liveLocation) {
+            setLiveData((prev) => ({
+              ...prev,
+              liveLocation: json.liveLocation,
+              partner: json.partner || prev.partner,
+              destinationCoords: json.destinationCoords || prev.destinationCoords,
+              originCoords: json.originCoords || prev.originCoords,
+            }));
+          }
+        }
+      } catch {
+        // Silently ignore transient network blip
+      }
+    }, 3000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [data?.shipment?.trackingId, data?.shipment?.status]);
+
   if (!data) {
     return <div className="text-sm text-muted-foreground py-10 text-center">Loading tracking data…</div>;
   }
 
   const s = data.shipment;
+
+  async function refreshTracking() {
+    try {
+      const res = await fetch(`/api/shipments/track/${encodeURIComponent(s.trackingId)}/live`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.liveLocation) {
+          setLiveData((prev) => ({
+            ...prev,
+            liveLocation: json.liveLocation,
+            partner: json.partner || prev.partner,
+            destinationCoords: json.destinationCoords || prev.destinationCoords,
+            originCoords: json.originCoords || prev.originCoords,
+          }));
+          toast.success("Location refreshed");
+        }
+      }
+    } catch {
+      toast.error("Could not refresh location");
+    }
+  }
+
   const events = data.events.map((e: any) => ({
     key: e.id,
     label: e.status.replace(/_/g, " "),
@@ -126,7 +218,59 @@ function TrackShipment() {
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <RouteMap from={s.senderCity} to={s.receiverCity} progress={progress} className="h-72 sm:h-96" />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold font-display">Live Delivery Route</span>
+                {liveData.liveLocation && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                    Real-time GPS
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg text-xs">
+                <button
+                  type="button"
+                  onClick={() => setMapType("live")}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                    mapType === "live"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  OpenStreetMap
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMapType("schematic")}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                    mapType === "schematic"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Milestones Map
+                </button>
+              </div>
+            </div>
+
+            {mapType === "live" ? (
+              <LiveDeliveryMap
+                destinationCoords={liveData.destinationCoords}
+                destinationAddress={`${s.receiverAddressLine}, ${s.receiverCity}, ${s.receiverState} ${s.receiverPincode}`}
+                driverLocation={liveData.liveLocation}
+                originCoords={liveData.originCoords}
+                partner={liveData.partner}
+                status={s.status}
+                deliveryOtp={s.deliveryOtp || getDeliveryOtp(s.trackingId)}
+                className="h-80 sm:h-[440px]"
+                onRefresh={refreshTracking}
+              />
+            ) : (
+              <RouteMap from={s.senderCity} to={s.receiverCity} progress={progress} className="h-72 sm:h-96" />
+            )}
+          </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Fact k="Current location" v={data.currentHubName ? `${data.currentHubName}` : nextEvent.replace(/_/g, " ")} />

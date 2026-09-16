@@ -14,6 +14,7 @@ import {
   type RealShipment,
 } from "@/lib/driver";
 import { StatusTag, PriorityTag } from "@/components/shiplync/driver/Tags";
+import { DriverLiveTracker } from "@/components/shiplync/driver/DriverLiveTracker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -189,6 +190,29 @@ function ShipmentDetailPage() {
           <StatusTag status={s.status} />
         </div>
       </div>
+
+      {/* Real-time GPS Tracking & Live Customer Broadcast */}
+      <DriverLiveTracker
+        shipmentId={s.id}
+        trackingId={s.trackingId}
+        receiverAddress={{
+          addressLine: s.receiverAddressLine,
+          city: s.receiverCity,
+          state: s.receiverState,
+          pincode: s.receiverPincode,
+          lat: (s as any).receiverLat ?? null,
+          lng: (s as any).receiverLng ?? null,
+        }}
+        senderAddress={{
+          addressLine: (s as any).senderAddressLine ?? "",
+          city: (s as any).senderCity ?? s.receiverCity,
+          state: (s as any).senderState ?? s.receiverState,
+          pincode: (s as any).senderPincode ?? s.receiverPincode,
+          lat: (s as any).senderLat ?? null,
+          lng: (s as any).senderLng ?? null,
+        }}
+        status={s.status}
+      />
 
       {/* Actions — the correct next step is the dominant control here. */}
       <div className="border rounded-xl bg-card p-4 space-y-3">

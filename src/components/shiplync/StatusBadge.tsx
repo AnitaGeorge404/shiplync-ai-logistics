@@ -5,15 +5,15 @@ import { cn } from "@/lib/utils";
 // Canonical ShipLync status language — the same colors and labels are used
 // everywhere a shipment status appears (tables, cards, timelines, filters).
 const styles: Record<ShipmentStatus, string> = {
-  booked: "bg-muted text-muted-foreground border-border",
-  picked_up: "bg-info/10 text-info border-info/25",
-  at_hub: "bg-info/10 text-info border-info/25",
-  in_transit: "bg-primary/10 text-primary border-primary/25",
-  out_for_delivery: "bg-warning/10 text-warning-foreground border-warning/25",
-  delivered: "bg-success/10 text-success-foreground border-success/25",
-  exception: "bg-destructive/10 text-destructive border-destructive/25",
-  returned: "bg-muted text-muted-foreground border-border",
-  cancelled: "bg-muted text-muted-foreground border-border",
+  booked: "bg-muted/70 text-foreground border-border font-medium",
+  picked_up: "bg-sky-500/15 text-sky-800 dark:text-sky-300 border-sky-500/30 font-medium",
+  at_hub: "bg-sky-500/15 text-sky-800 dark:text-sky-300 border-sky-500/30 font-medium",
+  in_transit: "bg-primary/15 text-primary border-primary/30 font-medium",
+  out_for_delivery: "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30 font-semibold",
+  delivered: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/30 font-semibold",
+  exception: "bg-destructive/15 text-destructive border-destructive/30 font-medium",
+  returned: "bg-muted/70 text-foreground border-border font-medium",
+  cancelled: "bg-muted/70 text-muted-foreground border-border font-medium",
 };
 
 export function StatusBadge({ status, className }: { status: ShipmentStatus; className?: string }) {

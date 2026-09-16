@@ -15,7 +15,12 @@ import {
 import { auth } from "./auth";
 import { calculateShipmentCost, estimateDeliveryHours, generateTrackingId } from "./pricing";
 import { detectExceptions } from "./exception-detection";
-import { calculateDistance } from "./distance";
+import { calculateDistance, resolveLocationCoords } from "./distance";
+import {
+  updateDriverLocation,
+  getDriverLocation,
+  generateInterpolatedPosition,
+} from "./live-tracking";
 import {
   phoneSchema,
   addressLineSchema,
@@ -185,6 +190,33 @@ const attemptSchema = z.object({
   otpVerified: z.boolean().default(false),
 });
 
+const driverLocationSchema = z.object({
+  shipmentId: z.string(),
+  trackingId: z.string().optional(),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  speed: z.number().nullable().optional(),
+  heading: z.number().nullable().optional(),
+  accuracy: z.number().nullable().optional(),
+});
+
+function ensureDistinctCoords(
+  origin: { lat: number; lng: number },
+  dest: { lat: number; lng: number }
+): { origin: { lat: number; lng: number }; dest: { lat: number; lng: number } } {
+  const dLat = Math.abs(origin.lat - dest.lat);
+  const dLng = Math.abs(origin.lng - dest.lng);
+  if (dLat < 0.008 && dLng < 0.008) {
+    // When sender and receiver are in the same neighborhood/town, offset the fulfillment hub/origin
+    // by ~1.8km Northwest so that an actual street delivery route is drawn (like Blinkit / Instamart dark stores).
+    return {
+      origin: { lat: dest.lat + 0.014, lng: dest.lng - 0.014 },
+      dest,
+    };
+  }
+  return { origin, dest };
+}
+
 export async function handleApiRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const parts = url.pathname.split("/").filter(Boolean); // ["api", ...]
@@ -235,6 +267,28 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       } catch (err: any) {
         return json({ error: "Failed to fetch PIN code details" }, 500);
       }
+    }
+
+    // ---------------------------------------------------------------
+    // POST /api/driver/location — delivery partner live GPS broadcast
+    // ---------------------------------------------------------------
+    if (parts[1] === "driver" && parts[2] === "location" && request.method === "POST") {
+      const user = await getSessionUser(request);
+      const body = await request.json().catch(() => null);
+      const parsed = driverLocationSchema.safeParse(body);
+      if (!parsed.success) {
+        return json({ error: "Invalid location payload", details: parsed.error.flatten() }, 400);
+      }
+
+      const loc = updateDriverLocation({
+        ...parsed.data,
+        agentId: user?.id,
+        speed: parsed.data.speed ?? null,
+        heading: parsed.data.heading ?? null,
+        accuracy: parsed.data.accuracy ?? null,
+      });
+
+      return json({ ok: true, location: loc });
     }
 
     // ---------------------------------------------------------------
@@ -400,6 +454,84 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       return json({ shipments: shipmentsWithOtp });
     }
 
+    // GET /api/shipments/track/:trackingId/live — lightweight polling for customer live map
+    if (parts[1] === "shipments" && parts[2] === "track" && parts[3] && parts[4] === "live" && request.method === "GET") {
+      const trackingId = decodeURIComponent(parts[3]);
+      const [shipment] = await db
+        .select({
+          id: shipments.id,
+          trackingId: shipments.trackingId,
+          status: shipments.status,
+          assignedAgentId: shipments.assignedAgentId,
+          assignedVehicleId: shipments.assignedVehicleId,
+          receiverCity: shipments.receiverCity,
+          receiverState: shipments.receiverState,
+          receiverPincode: shipments.receiverPincode,
+          receiverAddressLine: shipments.receiverAddressLine,
+          receiverLat: shipments.receiverLat,
+          receiverLng: shipments.receiverLng,
+          senderCity: shipments.senderCity,
+          senderState: shipments.senderState,
+          senderPincode: shipments.senderPincode,
+          senderAddressLine: shipments.senderAddressLine,
+          senderLat: shipments.senderLat,
+          senderLng: shipments.senderLng,
+          estimatedDeliveryAt: shipments.estimatedDeliveryAt,
+        })
+        .from(shipments)
+        .where(eq(shipments.trackingId, trackingId))
+        .limit(1);
+
+      if (!shipment) return json({ error: "Tracking ID not found" }, 404);
+
+      const rawDest = shipment.receiverLat && shipment.receiverLng
+        ? { lat: shipment.receiverLat, lng: shipment.receiverLng }
+        : resolveLocationCoords({
+            city: shipment.receiverCity,
+            state: shipment.receiverState,
+            pincode: shipment.receiverPincode,
+            addressLine: shipment.receiverAddressLine,
+          });
+
+      const rawOrigin = shipment.senderLat && shipment.senderLng
+        ? { lat: shipment.senderLat, lng: shipment.senderLng }
+        : resolveLocationCoords({
+            city: shipment.senderCity,
+            state: shipment.senderState,
+            pincode: shipment.senderPincode,
+            addressLine: shipment.senderAddressLine,
+          });
+
+      const { origin: originCoords, dest: destCoords } = ensureDistinctCoords(rawOrigin, rawDest);
+
+      let liveLoc = getDriverLocation(shipment.id) || getDriverLocation(shipment.trackingId);
+      if (!liveLoc && (shipment.status === "out_for_delivery" || shipment.status === "picked_up")) {
+        const pos = generateInterpolatedPosition(
+          originCoords,
+          destCoords,
+          shipment.status === "out_for_delivery" ? 0.7 : 0.25
+        );
+        liveLoc = {
+          shipmentId: shipment.id,
+          trackingId: shipment.trackingId,
+          agentId: shipment.assignedAgentId ?? undefined,
+          lat: pos.lat,
+          lng: pos.lng,
+          speed: 25,
+          heading: pos.heading,
+          accuracy: 6,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
+      return json({
+        status: shipment.status,
+        liveLocation: liveLoc,
+        destinationCoords: destCoords,
+        originCoords,
+      });
+    }
+
     // GET /api/shipments/track/:trackingId — public
     if (parts[1] === "shipments" && parts[2] === "track" && parts[3] && request.method === "GET") {
       const trackingId = decodeURIComponent(parts[3]);
@@ -429,9 +561,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         currentHubName = hub?.name ?? null;
       }
 
-      // Real delivery-attempt and exception records for this shipment, so
-      // the customer tracking page can show them alongside the event
-      // timeline instead of only inferring them from status strings.
+      // Real delivery-attempt and exception records for this shipment
       const attempts = await db
         .select()
         .from(deliveryAttempts)
@@ -444,12 +574,79 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         .where(eq(exceptions.shipmentId, shipment.id))
         .orderBy(desc(exceptions.createdAt));
 
+      // Resolve coordinates for OpenStreetMap tracking
+      const rawDest = shipment.receiverLat && shipment.receiverLng
+        ? { lat: shipment.receiverLat, lng: shipment.receiverLng }
+        : resolveLocationCoords({
+            city: shipment.receiverCity,
+            state: shipment.receiverState,
+            pincode: shipment.receiverPincode,
+            addressLine: shipment.receiverAddressLine,
+          });
+
+      const rawOrigin = shipment.senderLat && shipment.senderLng
+        ? { lat: shipment.senderLat, lng: shipment.senderLng }
+        : resolveLocationCoords({
+            city: shipment.senderCity,
+            state: shipment.senderState,
+            pincode: shipment.senderPincode,
+            addressLine: shipment.senderAddressLine,
+          });
+
+      const { origin: originCoords, dest: destCoords } = ensureDistinctCoords(rawOrigin, rawDest);
+
+      // Resolve assigned partner and vehicle details
+      let partner: { name: string; phone: string | null; role: string; vehicle?: { registrationNumber: string; type: string } | null } | null = null;
+      if (shipment.assignedAgentId) {
+        const [agentUser] = await db
+          .select({ name: userTable.name, phone: userTable.phone, role: userTable.role })
+          .from(userTable)
+          .where(eq(userTable.id, shipment.assignedAgentId))
+          .limit(1);
+        if (agentUser) {
+          let vehicleDetails = null;
+          if (shipment.assignedVehicleId) {
+            const [veh] = await db
+              .select({ registrationNumber: vehicles.registrationNumber, type: vehicles.type })
+              .from(vehicles)
+              .where(eq(vehicles.id, shipment.assignedVehicleId))
+              .limit(1);
+            if (veh) vehicleDetails = veh;
+          }
+          partner = { ...agentUser, vehicle: vehicleDetails };
+        }
+      }
+
+      let liveLoc = getDriverLocation(shipment.id) || getDriverLocation(shipment.trackingId);
+      if (!liveLoc && (shipment.status === "out_for_delivery" || shipment.status === "picked_up")) {
+        const pos = generateInterpolatedPosition(
+          originCoords,
+          destCoords,
+          shipment.status === "out_for_delivery" ? 0.7 : 0.25
+        );
+        liveLoc = {
+          shipmentId: shipment.id,
+          trackingId: shipment.trackingId,
+          agentId: shipment.assignedAgentId ?? undefined,
+          lat: pos.lat,
+          lng: pos.lng,
+          speed: 25,
+          heading: pos.heading,
+          accuracy: 6,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
       return json({
         shipment: { ...shipment, deliveryOtp: getDeliveryOtp(shipment.trackingId) },
         events,
         currentHubName,
         attempts,
         exceptions: shipmentExceptions,
+        destinationCoords: destCoords,
+        originCoords,
+        liveLocation: liveLoc,
+        partner,
       });
     }
 

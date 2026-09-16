@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "leaflet/dist/leaflet.css";
 
 @source "../src";
 
@@ -86,11 +87,11 @@
   --destructive: oklch(0.52 0.19 27);
   --destructive-foreground: oklch(0.99 0 0);
   --success: oklch(0.5 0.11 155);
-  --success-foreground: oklch(0.99 0 0);
+  --success-foreground: oklch(0.2 0.08 155);
   --warning: oklch(0.6 0.15 75);
-  --warning-foreground: oklch(0.99 0 0);
+  --warning-foreground: oklch(0.25 0.1 75);
   --info: oklch(0.5 0.1 235);
-  --info-foreground: oklch(0.99 0 0);
+  --info-foreground: oklch(0.2 0.08 235);
   --medical: oklch(0.5 0.17 20);
   --medical-foreground: oklch(0.99 0 0);
   --border: oklch(0.89 0.004 250);
@@ -129,11 +130,11 @@
   --destructive: oklch(0.62 0.18 25);
   --destructive-foreground: oklch(0.99 0 0);
   --success: oklch(0.65 0.12 155);
-  --success-foreground: oklch(0.12 0.03 155);
+  --success-foreground: oklch(0.9 0.1 155);
   --warning: oklch(0.72 0.14 75);
-  --warning-foreground: oklch(0.16 0.03 60);
+  --warning-foreground: oklch(0.92 0.12 75);
   --info: oklch(0.65 0.1 235);
-  --info-foreground: oklch(0.12 0.03 235);
+  --info-foreground: oklch(0.9 0.08 235);
   --medical: oklch(0.62 0.17 20);
   --medical-foreground: oklch(0.99 0 0);
   --border: oklch(1 0 0 / 9%);
@@ -199,4 +200,17 @@
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
+}
+
+/* OpenStreetMap / Leaflet Custom Overrides */
+.custom-rider-marker,
+.custom-dest-marker {
+  background: transparent !important;
+  border: none !important;
+  overflow: visible !important;
+}
+
+.leaflet-container {
+  font-family: var(--font-sans) !important;
+  outline: none;
 }

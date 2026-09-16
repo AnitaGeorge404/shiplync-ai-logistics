@@ -3,11 +3,11 @@ import { cn } from "@/lib/utils";
 import { STATUS_LABEL, STATUS_TONE, priorityTier, type RealShipment } from "@/lib/driver";
 
 const TONE_CLASS: Record<string, string> = {
-  neutral: "bg-muted text-muted-foreground border-border",
-  info: "bg-info/10 text-info border-info/20",
-  warning: "bg-warning/15 text-warning-foreground border-warning/30",
-  danger: "bg-destructive/10 text-destructive border-destructive/20",
-  success: "bg-success/15 text-success-foreground border-success/30",
+  neutral: "bg-muted/70 text-foreground border-border font-medium",
+  info: "bg-sky-500/15 text-sky-800 dark:text-sky-300 border-sky-500/30 font-medium",
+  warning: "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30 font-semibold",
+  danger: "bg-destructive/15 text-destructive border-destructive/30 font-medium",
+  success: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/30 font-semibold",
 };
 
 export function StatusTag({ status, className }: { status: string; className?: string }) {
@@ -52,7 +52,7 @@ export function PriorityTag({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning/15 text-warning-foreground px-2 py-0.5 text-[11px] font-semibold tracking-wide whitespace-nowrap",
+        "inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-300 px-2 py-0.5 text-[11px] font-semibold tracking-wide whitespace-nowrap",
         className,
       )}
     >
