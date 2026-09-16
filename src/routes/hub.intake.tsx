@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState, useMemo, useRef } from "react";
 import { useShipments, useQueryClient } from "@/lib/api-hooks";
+import { PriorityBadge } from "@/components/shiplync/PriorityBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +16,6 @@ import {
 import {
   ScanLine,
   PackageCheck,
-  Sparkles,
   AlertTriangle,
   CheckCircle2,
   Search,
@@ -29,7 +29,7 @@ export const Route = createFileRoute("/hub/intake")({
   head: () => ({
     meta: [
       { title: "Intake & Scan — Hub Operations" },
-      { name: "description", content: "Scan incoming parcels and mark them received at this hub — writes to the live database." },
+      { name: "description", content: "Scan incoming parcels, verify details, and mark them received at this hub — writes to the live database." },
     ],
   }),
   component: HubIntakePage,
@@ -39,10 +39,15 @@ function HubIntakePage() {
   const { data: hubShipments = [], isLoading } = useShipments("hub");
   const queryClient = useQueryClient();
   const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [lookingUp, setLookingUp] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTrackingId, setActiveTrackingId] = useState<string | null>(null);
+  // The shipment found but not yet marked received — nothing is written to
+  // the database until "Mark Received" is confirmed.
+  const [pending, setPending] = useState<any | null>(null);
+  const [lastReceived, setLastReceived] = useState<any | null>(null);
   const [search, setSearch] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const stats = useMemo(() => {
     const total = hubShipments.length;
@@ -60,26 +65,35 @@ function HubIntakePage() {
     );
   }, [hubShipments, search]);
 
-  const activeParcel = hubShipments.find((s: any) => s.trackingId === activeTrackingId);
-
-  async function scanIntake(e: React.FormEvent) {
-    e.preventDefault();
-    await submitScan(code);
-  }
-
-  async function submitScan(rawCode: string) {
-    if (!rawCode.trim()) return;
-    setBusy(true);
+  async function lookup(e?: React.FormEvent) {
+    e?.preventDefault();
+    const rawCode = code.trim();
+    if (!rawCode) return;
+    setLookingUp(true);
     setError(null);
+    setLastReceived(null);
     try {
-      const lookup = await fetch(`/api/shipments/track/${encodeURIComponent(rawCode.trim())}`);
-      const lookupData = await lookup.json();
-      if (!lookup.ok) {
-        setError(lookupData.error || "Tracking ID not found in database.");
+      const res = await fetch(`/api/shipments/track/${encodeURIComponent(rawCode)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Tracking ID not found in database.");
+        setPending(null);
         return;
       }
-      const shipmentId = lookupData.shipment.id;
-      const res = await fetch(`/api/shipments/${shipmentId}/status`, {
+      setPending(data.shipment);
+    } catch {
+      setError("Network error.");
+    } finally {
+      setLookingUp(false);
+    }
+  }
+
+  async function confirmReceived() {
+    if (!pending) return;
+    setConfirming(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/shipments/${pending.id}/status`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -91,19 +105,28 @@ function HubIntakePage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Could not update shipment.");
+        setError(data.error || "Could not mark this shipment received.");
         return;
       }
-      setActiveTrackingId(data.shipment.trackingId);
+      setLastReceived(data.shipment);
+      setPending(null);
       setCode("");
       queryClient.invalidateQueries({ queryKey: ["shipments", "hub"] });
-      toast.success(`${data.shipment.trackingId} scanned — marked arrived at hub`);
+      toast.success(`${data.shipment.trackingId} received at this hub`);
+      inputRef.current?.focus();
     } catch {
       setError("Network error.");
     } finally {
-      setBusy(false);
+      setConfirming(false);
     }
   }
+
+  function cancelPending() {
+    setPending(null);
+    setError(null);
+  }
+
+  const displayShipment = pending ?? lastReceived;
 
   return (
     <div className="space-y-6">
@@ -114,11 +137,11 @@ function HubIntakePage() {
               Intake & Scan
             </h1>
             <Badge variant="outline" className="text-[10px] font-mono gap-1">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> LIVE
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse-dot" /> LIVE
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Scan a real tracking ID to mark it received at this hub — writes directly to the database.
+            Scan or type a tracking ID, verify the shipment, then mark it received — writes directly to the database.
           </p>
         </div>
       </div>
@@ -147,78 +170,104 @@ function HubIntakePage() {
       <div className="grid lg:grid-cols-12 gap-6">
         <div className="lg:col-span-5 border rounded-xl p-5 bg-card space-y-4 shadow-sm">
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Scan tracking ID
+            1 · Scan or enter tracking ID
           </div>
-          <form onSubmit={scanIntake} className="flex gap-2">
+          <form onSubmit={lookup} className="flex gap-2">
             <Input
+              ref={inputRef}
               placeholder="e.g. SLXA158N21TS5"
               value={code}
               onChange={(e) => setCode(e.target.value)}
               className="h-10 text-xs font-mono bg-background"
               autoFocus
             />
-            <Button type="submit" className="h-10 text-xs gap-1.5 px-4" disabled={busy}>
-              <ScanLine className="h-4 w-4" /> {busy ? "Scanning..." : "Scan"}
+            <Button type="submit" className="h-10 text-xs gap-1.5 px-4" disabled={lookingUp}>
+              <Search className="h-4 w-4" /> {lookingUp ? "Looking up…" : "Look up"}
             </Button>
           </form>
           <BarcodeScanner
             onDetected={(text) => {
               setCode(text);
-              submitScan(text);
+              lookup();
             }}
           />
-          {error && <div className="text-xs text-destructive">{error}</div>}
+          {error && (
+            <div className="text-xs text-destructive flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {error}
+            </div>
+          )}
         </div>
 
         <div className="lg:col-span-7 border rounded-xl p-5 bg-card space-y-4 shadow-sm">
-          {activeParcel ? (
+          {displayShipment ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b pb-3">
                 <div>
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Last scanned</div>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                    {pending ? "2 · Verify before marking received" : "Last received"}
+                  </div>
                   <div className="font-mono text-xl font-bold text-foreground mt-0.5 flex items-center gap-2">
-                    {activeParcel.trackingId}
-                    {activeParcel.packageType === "medical" && (
-                      <Badge variant="outline" className="text-[10px] bg-red-50 dark:bg-red-950/40 text-red-600 border-red-200 dark:border-red-800">
+                    {displayShipment.trackingId}
+                    {displayShipment.packageType === "medical" && (
+                      <Badge variant="outline" className="text-[10px] bg-medical/10 text-medical border-medical/25">
                         Medical Priority
                       </Badge>
                     )}
                   </div>
                 </div>
-                <Badge variant="outline" className="text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 border-emerald-200 dark:border-emerald-800 capitalize">
-                  <CheckCircle2 className="h-3 w-3 mr-1" /> {activeParcel.status.replace(/_/g, " ")}
+                <Badge
+                  variant="outline"
+                  className={`text-xs font-medium capitalize ${
+                    pending ? "bg-warning/10 text-warning-foreground border-warning/25" : "bg-success/10 text-success border-success/25"
+                  }`}
+                >
+                  {pending ? <AlertTriangle className="h-3 w-3 mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
+                  {pending ? displayShipment.status.replace(/_/g, " ") : "Arrived at hub"}
                 </Badge>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 <div className="border rounded-md p-2.5 bg-muted/20">
                   <div className="text-muted-foreground text-[10px]">Origin</div>
-                  <div className="font-medium text-foreground mt-0.5">{activeParcel.senderCity}</div>
+                  <div className="font-medium text-foreground mt-0.5">{displayShipment.senderCity}</div>
                 </div>
                 <div className="border rounded-md p-2.5 bg-muted/20">
                   <div className="text-muted-foreground text-[10px]">Destination</div>
-                  <div className="font-medium text-foreground mt-0.5">{activeParcel.receiverCity}</div>
+                  <div className="font-medium text-foreground mt-0.5">{displayShipment.receiverCity}</div>
                 </div>
                 <div className="border rounded-md p-2.5 bg-muted/20">
                   <div className="text-muted-foreground text-[10px]">Category</div>
-                  <div className="font-medium text-foreground mt-0.5 capitalize">{activeParcel.packageType}</div>
+                  <div className="font-medium text-foreground mt-0.5 capitalize">{displayShipment.packageType}</div>
                 </div>
                 <div className="border rounded-md p-2.5 bg-muted/20">
                   <div className="text-muted-foreground text-[10px]">Weight</div>
-                  <div className="font-medium text-foreground mt-0.5">{activeParcel.weightKg} kg</div>
+                  <div className="font-medium text-foreground mt-0.5">{displayShipment.weightKg} kg</div>
                 </div>
               </div>
 
-              <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded-md flex items-center gap-2">
-                <Sparkles className="h-4 w-4 shrink-0 text-foreground" />
-                <span>Next step: assign a delivery agent and dispatch from Hub → Dispatch Center.</span>
-              </div>
+              {pending ? (
+                <div className="flex items-center gap-2 pt-1">
+                  <Button className="gap-1.5 h-9 text-xs" disabled={confirming} onClick={confirmReceived}>
+                    <CheckCircle2 className="h-4 w-4" /> {confirming ? "Marking received…" : "Mark Received"}
+                  </Button>
+                  <Button variant="outline" className="h-9 text-xs" disabled={confirming} onClick={cancelPending}>
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded-md flex items-center justify-between gap-2">
+                  <span>Next: assign an agent from Dispatch, or start a hub transfer.</span>
+                  <Link to="/hub/shipments/$trackingId" params={{ trackingId: displayShipment.trackingId }} className="font-medium text-foreground hover:underline shrink-0">
+                    View details →
+                  </Link>
+                </div>
+              )}
             </div>
           ) : (
             <div className="h-full grid place-items-center text-center text-muted-foreground text-xs py-16">
               <div>
                 <ScanLine className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                Scan a tracking ID to see its details here.
+                Look up a tracking ID to verify it here before marking it received.
               </div>
             </div>
           )}
@@ -249,31 +298,28 @@ function HubIntakePage() {
                 <TableHead className="text-xs font-medium">Tracking ID</TableHead>
                 <TableHead className="text-xs font-medium">Origin → Destination</TableHead>
                 <TableHead className="text-xs font-medium">Type & Weight</TableHead>
+                <TableHead className="text-xs font-medium">Priority</TableHead>
                 <TableHead className="text-xs font-medium">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {!isLoading && filteredHistory.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-xs text-muted-foreground py-8">
+                  <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-8">
                     No shipments at this hub yet.
                   </TableCell>
                 </TableRow>
               )}
               {filteredHistory.map((p: any) => (
-                <TableRow
-                  key={p.id}
-                  className={`text-xs hover:bg-muted/30 cursor-pointer ${activeParcel?.id === p.id ? "bg-muted/50" : ""}`}
-                  onClick={() => setActiveTrackingId(p.trackingId)}
-                >
+                <TableRow key={p.id} className="text-xs hover:bg-muted/30">
                   <TableCell className="font-mono font-semibold text-foreground text-xs py-3">
-                    {p.trackingId}
-                    {p.packageType === "medical" && (
-                      <Badge variant="outline" className="ml-1 text-[9px] h-4 px-1 border-red-200 text-red-600">Med</Badge>
-                    )}
+                    <Link to="/hub/shipments/$trackingId" params={{ trackingId: p.trackingId }} className="hover:underline">
+                      {p.trackingId}
+                    </Link>
                   </TableCell>
                   <TableCell className="text-xs font-medium">{p.senderCity} → {p.receiverCity}</TableCell>
                   <TableCell className="text-xs text-muted-foreground capitalize">{p.packageType} · {p.weightKg} kg</TableCell>
+                  <TableCell><PriorityBadge priority={p.priority} /></TableCell>
                   <TableCell className="text-xs font-medium capitalize">{p.status.replace(/_/g, " ")}</TableCell>
                 </TableRow>
               ))}

@@ -29,7 +29,7 @@ interface LoginFormProps {
 export const LoginForm: React.FC<LoginFormProps> = ({
   onSuccess,
   title = "Sign in to ShipLync",
-  subtitle = "Access instant shipment booking, live GPS tracking, and automated AI dispatch.",
+  subtitle = "Book shipments and track deliveries in real time, from pickup to drop-off.",
   compact = false,
 }) => {
   const { login, loginWithEmail, registerWithEmail } = useAuth();

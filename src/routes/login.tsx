@@ -38,7 +38,7 @@ function LoginPage() {
   if (isAuthenticated && user) {
     return (
       <div className="min-h-screen bg-muted/30 flex flex-col justify-center items-center p-4">
-        <div className="w-full max-w-md bg-background border rounded-2xl p-6 sm:p-8 shadow-xl text-center space-y-4">
+        <div className="w-full max-w-md bg-card border rounded-lg p-6 sm:p-8 shadow-sm text-center space-y-4">
           <div className="text-sm text-muted-foreground">
             You're already signed in as <span className="font-medium text-foreground">{user.name}</span> ({user.role?.replace(/_/g, " ")}).
           </div>
@@ -65,7 +65,7 @@ function LoginPage() {
 
   return (
     <div className="min-h-screen bg-muted/30 flex flex-col justify-center items-center p-4">
-      <div className="w-full max-w-md bg-background border rounded-2xl p-6 sm:p-8 shadow-xl">
+      <div className="w-full max-w-md bg-card border rounded-lg p-6 sm:p-8 shadow-sm">
         <LoginForm
           onSuccess={() => {
             navigate({ to: destination });

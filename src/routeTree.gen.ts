@@ -16,10 +16,10 @@ import { Route as DriverRouteImport } from './routes/driver'
 import { Route as HubRouteImport } from './routes/hub'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as AdminAgentsRouteImport } from './routes/admin.agents'
+import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
 import { Route as AdminExceptionsRouteImport } from './routes/admin.exceptions'
 import { Route as AdminFleetRouteImport } from './routes/admin.fleet'
-import { Route as AdminHubsRouteImport } from './routes/admin.hubs'
-import { Route as AdminMapRouteImport } from './routes/admin.map'
 import { Route as AdminNotificationsRouteImport } from './routes/admin.notifications'
 import { Route as AdminPaymentsRouteImport } from './routes/admin.payments'
 import { Route as AdminReportsRouteImport } from './routes/admin.reports'
@@ -47,8 +47,15 @@ import { Route as HubExceptionsRouteImport } from './routes/hub.exceptions'
 import { Route as HubIntakeRouteImport } from './routes/hub.intake'
 import { Route as HubLoadRouteImport } from './routes/hub.load'
 import { Route as HubMedicalRouteImport } from './routes/hub.medical'
+import { Route as HubTransfersRouteImport } from './routes/hub.transfers'
+import { Route as AdminHubsIndexRouteImport } from './routes/admin.hubs.index'
+import { Route as AdminHubsIdRouteImport } from './routes/admin.hubs.$id'
+import { Route as AdminShipmentsIndexRouteImport } from './routes/admin.shipments.index'
+import { Route as AdminShipmentsTrackingIdRouteImport } from './routes/admin.shipments.$trackingId'
 import { Route as CustomerTrackIndexRouteImport } from './routes/customer.track.index'
 import { Route as CustomerTrackIdRouteImport } from './routes/customer.track.$id'
+import { Route as DriverShipmentIdRouteImport } from './routes/driver.shipment.$id'
+import { Route as HubShipmentsTrackingIdRouteImport } from './routes/hub.shipments.$trackingId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -85,6 +92,16 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminAgentsRoute = AdminAgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminExceptionsRoute = AdminExceptionsRouteImport.update({
   id: '/exceptions',
   path: '/exceptions',
@@ -93,16 +110,6 @@ const AdminExceptionsRoute = AdminExceptionsRouteImport.update({
 const AdminFleetRoute = AdminFleetRouteImport.update({
   id: '/fleet',
   path: '/fleet',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminHubsRoute = AdminHubsRouteImport.update({
-  id: '/hubs',
-  path: '/hubs',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminMapRoute = AdminMapRouteImport.update({
-  id: '/map',
-  path: '/map',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminNotificationsRoute = AdminNotificationsRouteImport.update({
@@ -240,6 +247,32 @@ const HubMedicalRoute = HubMedicalRouteImport.update({
   path: '/medical',
   getParentRoute: () => HubRoute,
 } as any)
+const HubTransfersRoute = HubTransfersRouteImport.update({
+  id: '/transfers',
+  path: '/transfers',
+  getParentRoute: () => HubRoute,
+} as any)
+const AdminHubsIndexRoute = AdminHubsIndexRouteImport.update({
+  id: '/hubs/',
+  path: '/hubs/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminHubsIdRoute = AdminHubsIdRouteImport.update({
+  id: '/hubs/$id',
+  path: '/hubs/$id',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminShipmentsIndexRoute = AdminShipmentsIndexRouteImport.update({
+  id: '/shipments/',
+  path: '/shipments/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminShipmentsTrackingIdRoute =
+  AdminShipmentsTrackingIdRouteImport.update({
+    id: '/shipments/$trackingId',
+    path: '/shipments/$trackingId',
+    getParentRoute: () => AdminRoute,
+  } as any)
 const CustomerTrackIndexRoute = CustomerTrackIndexRouteImport.update({
   id: '/track/',
   path: '/track/',
@@ -250,6 +283,16 @@ const CustomerTrackIdRoute = CustomerTrackIdRouteImport.update({
   path: '/track/$id',
   getParentRoute: () => CustomerRoute,
 } as any)
+const DriverShipmentIdRoute = DriverShipmentIdRouteImport.update({
+  id: '/shipment/$id',
+  path: '/shipment/$id',
+  getParentRoute: () => DriverRoute,
+} as any)
+const HubShipmentsTrackingIdRoute = HubShipmentsTrackingIdRouteImport.update({
+  id: '/shipments/$trackingId',
+  path: '/shipments/$trackingId',
+  getParentRoute: () => HubRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -258,10 +301,10 @@ export interface FileRoutesByFullPath {
   '/driver': typeof DriverRouteWithChildren
   '/hub': typeof HubRouteWithChildren
   '/login': typeof LoginRoute
+  '/admin/agents': typeof AdminAgentsRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/exceptions': typeof AdminExceptionsRoute
   '/admin/fleet': typeof AdminFleetRoute
-  '/admin/hubs': typeof AdminHubsRoute
-  '/admin/map': typeof AdminMapRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/payments': typeof AdminPaymentsRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -286,20 +329,27 @@ export interface FileRoutesByFullPath {
   '/hub/intake': typeof HubIntakeRoute
   '/hub/load': typeof HubLoadRoute
   '/hub/medical': typeof HubMedicalRoute
+  '/hub/transfers': typeof HubTransfersRoute
   '/admin/': typeof AdminIndexRoute
   '/customer/': typeof CustomerIndexRoute
   '/driver/': typeof DriverIndexRoute
   '/hub/': typeof HubIndexRoute
+  '/admin/hubs/$id': typeof AdminHubsIdRoute
+  '/admin/shipments/$trackingId': typeof AdminShipmentsTrackingIdRoute
   '/customer/track/$id': typeof CustomerTrackIdRoute
+  '/driver/shipment/$id': typeof DriverShipmentIdRoute
+  '/hub/shipments/$trackingId': typeof HubShipmentsTrackingIdRoute
+  '/admin/hubs/': typeof AdminHubsIndexRoute
+  '/admin/shipments/': typeof AdminShipmentsIndexRoute
   '/customer/track/': typeof CustomerTrackIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/admin/agents': typeof AdminAgentsRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/exceptions': typeof AdminExceptionsRoute
   '/admin/fleet': typeof AdminFleetRoute
-  '/admin/hubs': typeof AdminHubsRoute
-  '/admin/map': typeof AdminMapRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/payments': typeof AdminPaymentsRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -324,11 +374,18 @@ export interface FileRoutesByTo {
   '/hub/intake': typeof HubIntakeRoute
   '/hub/load': typeof HubLoadRoute
   '/hub/medical': typeof HubMedicalRoute
+  '/hub/transfers': typeof HubTransfersRoute
   '/admin': typeof AdminIndexRoute
   '/customer': typeof CustomerIndexRoute
   '/driver': typeof DriverIndexRoute
   '/hub': typeof HubIndexRoute
+  '/admin/hubs/$id': typeof AdminHubsIdRoute
+  '/admin/shipments/$trackingId': typeof AdminShipmentsTrackingIdRoute
   '/customer/track/$id': typeof CustomerTrackIdRoute
+  '/driver/shipment/$id': typeof DriverShipmentIdRoute
+  '/hub/shipments/$trackingId': typeof HubShipmentsTrackingIdRoute
+  '/admin/hubs': typeof AdminHubsIndexRoute
+  '/admin/shipments': typeof AdminShipmentsIndexRoute
   '/customer/track': typeof CustomerTrackIndexRoute
 }
 export interface FileRoutesById {
@@ -339,10 +396,10 @@ export interface FileRoutesById {
   '/driver': typeof DriverRouteWithChildren
   '/hub': typeof HubRouteWithChildren
   '/login': typeof LoginRoute
+  '/admin/agents': typeof AdminAgentsRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/exceptions': typeof AdminExceptionsRoute
   '/admin/fleet': typeof AdminFleetRoute
-  '/admin/hubs': typeof AdminHubsRoute
-  '/admin/map': typeof AdminMapRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/payments': typeof AdminPaymentsRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -367,11 +424,18 @@ export interface FileRoutesById {
   '/hub/intake': typeof HubIntakeRoute
   '/hub/load': typeof HubLoadRoute
   '/hub/medical': typeof HubMedicalRoute
+  '/hub/transfers': typeof HubTransfersRoute
   '/admin/': typeof AdminIndexRoute
   '/customer/': typeof CustomerIndexRoute
   '/driver/': typeof DriverIndexRoute
   '/hub/': typeof HubIndexRoute
+  '/admin/hubs/$id': typeof AdminHubsIdRoute
+  '/admin/shipments/$trackingId': typeof AdminShipmentsTrackingIdRoute
   '/customer/track/$id': typeof CustomerTrackIdRoute
+  '/driver/shipment/$id': typeof DriverShipmentIdRoute
+  '/hub/shipments/$trackingId': typeof HubShipmentsTrackingIdRoute
+  '/admin/hubs/': typeof AdminHubsIndexRoute
+  '/admin/shipments/': typeof AdminShipmentsIndexRoute
   '/customer/track/': typeof CustomerTrackIndexRoute
 }
 export interface FileRouteTypes {
@@ -383,10 +447,10 @@ export interface FileRouteTypes {
     | '/driver'
     | '/hub'
     | '/login'
+    | '/admin/agents'
+    | '/admin/analytics'
     | '/admin/exceptions'
     | '/admin/fleet'
-    | '/admin/hubs'
-    | '/admin/map'
     | '/admin/notifications'
     | '/admin/payments'
     | '/admin/reports'
@@ -411,20 +475,27 @@ export interface FileRouteTypes {
     | '/hub/intake'
     | '/hub/load'
     | '/hub/medical'
+    | '/hub/transfers'
     | '/admin/'
     | '/customer/'
     | '/driver/'
     | '/hub/'
+    | '/admin/hubs/$id'
+    | '/admin/shipments/$trackingId'
     | '/customer/track/$id'
+    | '/driver/shipment/$id'
+    | '/hub/shipments/$trackingId'
+    | '/admin/hubs/'
+    | '/admin/shipments/'
     | '/customer/track/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
+    | '/admin/agents'
+    | '/admin/analytics'
     | '/admin/exceptions'
     | '/admin/fleet'
-    | '/admin/hubs'
-    | '/admin/map'
     | '/admin/notifications'
     | '/admin/payments'
     | '/admin/reports'
@@ -449,11 +520,18 @@ export interface FileRouteTypes {
     | '/hub/intake'
     | '/hub/load'
     | '/hub/medical'
+    | '/hub/transfers'
     | '/admin'
     | '/customer'
     | '/driver'
     | '/hub'
+    | '/admin/hubs/$id'
+    | '/admin/shipments/$trackingId'
     | '/customer/track/$id'
+    | '/driver/shipment/$id'
+    | '/hub/shipments/$trackingId'
+    | '/admin/hubs'
+    | '/admin/shipments'
     | '/customer/track'
   id:
     | '__root__'
@@ -463,10 +541,10 @@ export interface FileRouteTypes {
     | '/driver'
     | '/hub'
     | '/login'
+    | '/admin/agents'
+    | '/admin/analytics'
     | '/admin/exceptions'
     | '/admin/fleet'
-    | '/admin/hubs'
-    | '/admin/map'
     | '/admin/notifications'
     | '/admin/payments'
     | '/admin/reports'
@@ -491,11 +569,18 @@ export interface FileRouteTypes {
     | '/hub/intake'
     | '/hub/load'
     | '/hub/medical'
+    | '/hub/transfers'
     | '/admin/'
     | '/customer/'
     | '/driver/'
     | '/hub/'
+    | '/admin/hubs/$id'
+    | '/admin/shipments/$trackingId'
     | '/customer/track/$id'
+    | '/driver/shipment/$id'
+    | '/hub/shipments/$trackingId'
+    | '/admin/hubs/'
+    | '/admin/shipments/'
     | '/customer/track/'
   fileRoutesById: FileRoutesById
 }
@@ -559,6 +644,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/agents': {
+      id: '/admin/agents'
+      path: '/agents'
+      fullPath: '/admin/agents'
+      preLoaderRoute: typeof AdminAgentsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/analytics': {
+      id: '/admin/analytics'
+      path: '/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof AdminAnalyticsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/exceptions': {
       id: '/admin/exceptions'
       path: '/exceptions'
@@ -571,20 +670,6 @@ declare module '@tanstack/react-router' {
       path: '/fleet'
       fullPath: '/admin/fleet'
       preLoaderRoute: typeof AdminFleetRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/hubs': {
-      id: '/admin/hubs'
-      path: '/hubs'
-      fullPath: '/admin/hubs'
-      preLoaderRoute: typeof AdminHubsRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/map': {
-      id: '/admin/map'
-      path: '/map'
-      fullPath: '/admin/map'
-      preLoaderRoute: typeof AdminMapRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/notifications': {
@@ -776,6 +861,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HubMedicalRouteImport
       parentRoute: typeof HubRoute
     }
+    '/hub/transfers': {
+      id: '/hub/transfers'
+      path: '/transfers'
+      fullPath: '/hub/transfers'
+      preLoaderRoute: typeof HubTransfersRouteImport
+      parentRoute: typeof HubRoute
+    }
+    '/admin/hubs/': {
+      id: '/admin/hubs/'
+      path: '/hubs'
+      fullPath: '/admin/hubs/'
+      preLoaderRoute: typeof AdminHubsIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/hubs/$id': {
+      id: '/admin/hubs/$id'
+      path: '/hubs/$id'
+      fullPath: '/admin/hubs/$id'
+      preLoaderRoute: typeof AdminHubsIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/shipments/': {
+      id: '/admin/shipments/'
+      path: '/shipments'
+      fullPath: '/admin/shipments/'
+      preLoaderRoute: typeof AdminShipmentsIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/shipments/$trackingId': {
+      id: '/admin/shipments/$trackingId'
+      path: '/shipments/$trackingId'
+      fullPath: '/admin/shipments/$trackingId'
+      preLoaderRoute: typeof AdminShipmentsTrackingIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/customer/track/': {
       id: '/customer/track/'
       path: '/track'
@@ -790,33 +910,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CustomerTrackIdRouteImport
       parentRoute: typeof CustomerRoute
     }
+    '/driver/shipment/$id': {
+      id: '/driver/shipment/$id'
+      path: '/shipment/$id'
+      fullPath: '/driver/shipment/$id'
+      preLoaderRoute: typeof DriverShipmentIdRouteImport
+      parentRoute: typeof DriverRoute
+    }
+    '/hub/shipments/$trackingId': {
+      id: '/hub/shipments/$trackingId'
+      path: '/shipments/$trackingId'
+      fullPath: '/hub/shipments/$trackingId'
+      preLoaderRoute: typeof HubShipmentsTrackingIdRouteImport
+      parentRoute: typeof HubRoute
+    }
   }
 }
 
 interface AdminRouteChildren {
+  AdminAgentsRoute: typeof AdminAgentsRoute
+  AdminAnalyticsRoute: typeof AdminAnalyticsRoute
   AdminExceptionsRoute: typeof AdminExceptionsRoute
   AdminFleetRoute: typeof AdminFleetRoute
-  AdminHubsRoute: typeof AdminHubsRoute
-  AdminMapRoute: typeof AdminMapRoute
   AdminNotificationsRoute: typeof AdminNotificationsRoute
   AdminPaymentsRoute: typeof AdminPaymentsRoute
   AdminReportsRoute: typeof AdminReportsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminUsersRoute: typeof AdminUsersRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminHubsIdRoute: typeof AdminHubsIdRoute
+  AdminShipmentsTrackingIdRoute: typeof AdminShipmentsTrackingIdRoute
+  AdminHubsIndexRoute: typeof AdminHubsIndexRoute
+  AdminShipmentsIndexRoute: typeof AdminShipmentsIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAgentsRoute: AdminAgentsRoute,
+  AdminAnalyticsRoute: AdminAnalyticsRoute,
   AdminExceptionsRoute: AdminExceptionsRoute,
   AdminFleetRoute: AdminFleetRoute,
-  AdminHubsRoute: AdminHubsRoute,
-  AdminMapRoute: AdminMapRoute,
   AdminNotificationsRoute: AdminNotificationsRoute,
   AdminPaymentsRoute: AdminPaymentsRoute,
   AdminReportsRoute: AdminReportsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AdminHubsIdRoute: AdminHubsIdRoute,
+  AdminShipmentsTrackingIdRoute: AdminShipmentsTrackingIdRoute,
+  AdminHubsIndexRoute: AdminHubsIndexRoute,
+  AdminShipmentsIndexRoute: AdminShipmentsIndexRoute,
 }
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
@@ -860,6 +1002,7 @@ interface DriverRouteChildren {
   DriverMyRouteRoute: typeof DriverMyRouteRoute
   DriverPerformanceRoute: typeof DriverPerformanceRoute
   DriverIndexRoute: typeof DriverIndexRoute
+  DriverShipmentIdRoute: typeof DriverShipmentIdRoute
 }
 
 const DriverRouteChildren: DriverRouteChildren = {
@@ -869,6 +1012,7 @@ const DriverRouteChildren: DriverRouteChildren = {
   DriverMyRouteRoute: DriverMyRouteRoute,
   DriverPerformanceRoute: DriverPerformanceRoute,
   DriverIndexRoute: DriverIndexRoute,
+  DriverShipmentIdRoute: DriverShipmentIdRoute,
 }
 
 const DriverRouteWithChildren =
@@ -881,7 +1025,9 @@ interface HubRouteChildren {
   HubIntakeRoute: typeof HubIntakeRoute
   HubLoadRoute: typeof HubLoadRoute
   HubMedicalRoute: typeof HubMedicalRoute
+  HubTransfersRoute: typeof HubTransfersRoute
   HubIndexRoute: typeof HubIndexRoute
+  HubShipmentsTrackingIdRoute: typeof HubShipmentsTrackingIdRoute
 }
 
 const HubRouteChildren: HubRouteChildren = {
@@ -891,7 +1037,9 @@ const HubRouteChildren: HubRouteChildren = {
   HubIntakeRoute: HubIntakeRoute,
   HubLoadRoute: HubLoadRoute,
   HubMedicalRoute: HubMedicalRoute,
+  HubTransfersRoute: HubTransfersRoute,
   HubIndexRoute: HubIndexRoute,
+  HubShipmentsTrackingIdRoute: HubShipmentsTrackingIdRoute,
 }
 
 const HubRouteWithChildren = HubRoute._addFileChildren(HubRouteChildren)

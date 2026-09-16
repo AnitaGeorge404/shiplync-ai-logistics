@@ -1,17 +1,17 @@
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { Sparkles, ArrowLeft } from "lucide-react";
+import { Construction, ArrowLeft } from "lucide-react";
 
 export function ComingSoon({ title, back }: { title: string; back: string }) {
   return (
-    <div className="max-w-2xl mx-auto py-16">
-      <div className="card-elevated p-10 text-center">
-        <div className="mx-auto h-14 w-14 rounded-2xl bg-primary/10 grid place-items-center text-primary">
-          <Sparkles className="h-6 w-6" />
+    <div className="max-w-lg mx-auto py-16">
+      <div className="card-elevated p-8 text-center">
+        <div className="mx-auto h-10 w-10 rounded-md bg-muted grid place-items-center text-muted-foreground">
+          <Construction className="h-5 w-5" />
         </div>
-        <h1 className="mt-5 font-display text-2xl font-semibold">{title}</h1>
+        <h1 className="mt-4 text-lg font-semibold">{title}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          This surface is part of the ShipLync roadmap. Core flows are live in the primary dashboards — the AI Coordinator is training on this workflow now.
+          This module isn't built yet. Core flows are live in the primary dashboards.
         </p>
         <div className="mt-5">
           <Link to={back}>

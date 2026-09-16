@@ -8,22 +8,24 @@ type Props = {
   trend?: "up" | "down" | "flat";
   icon?: ReactNode;
   hint?: string;
-  accent?: string;
+  tone?: "default" | "warning" | "destructive";
 };
 
-export function StatCard({ label, value, delta, trend = "up", icon, hint, accent }: Props) {
+const TONE_VALUE: Record<NonNullable<Props["tone"]>, string> = {
+  default: "text-foreground",
+  warning: "text-warning-foreground",
+  destructive: "text-destructive",
+};
+
+export function StatCard({ label, value, delta, trend = "up", icon, hint, tone = "default" }: Props) {
   return (
-    <div className="card-elevated p-5 relative overflow-hidden group">
-      <div
-        className="absolute inset-x-0 top-0 h-0.5"
-        style={{ background: accent ?? "hsl(var(--primary))" }}
-      />
-      <div className="flex items-start justify-between">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</div>
+    <div className="border rounded-lg bg-card p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{label}</div>
         {icon && <div className="text-muted-foreground [&>svg]:h-4 [&>svg]:w-4">{icon}</div>}
       </div>
-      <div className="mt-3 flex items-baseline gap-2">
-        <div className="font-display text-3xl font-semibold tracking-tight">{value}</div>
+      <div className="mt-2 flex items-baseline gap-2">
+        <div className={`text-2xl font-semibold tracking-tight ${TONE_VALUE[tone]}`}>{value}</div>
         {delta && (
           <div
             className={`text-xs font-medium flex items-center gap-0.5 ${

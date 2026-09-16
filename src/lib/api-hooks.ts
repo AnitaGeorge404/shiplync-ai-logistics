@@ -7,11 +7,14 @@ async function getJson<T>(url: string, fallback: T): Promise<T> {
   return res.json();
 }
 
-export function useShipments(scope: "assigned" | "hub" | "unassigned" | "all" | "mine") {
+export function useShipments(
+  scope: "assigned" | "hub" | "hub_transfers" | "unassigned" | "all" | "mine",
+) {
   const query = scope === "mine" ? "" : `?scope=${scope}`;
   return useQuery({
     queryKey: ["shipments", scope],
-    queryFn: async () => (await getJson<{ shipments: any[] }>(`/api/shipments${query}`, { shipments: [] })).shipments,
+    queryFn: async () =>
+      (await getJson<{ shipments: any[] }>(`/api/shipments${query}`, { shipments: [] })).shipments,
     refetchInterval: 8000,
   });
 }
@@ -29,6 +32,19 @@ export function useExceptions(scope?: "mine") {
   });
 }
 
+export function useDeliveryAttempts(shipmentId: string | undefined) {
+  return useQuery({
+    queryKey: ["shipments", shipmentId, "attempts"],
+    queryFn: async () =>
+      (
+        await getJson<{ attempts: any[] }>(`/api/shipments/${shipmentId}/attempts`, {
+          attempts: [],
+        })
+      ).attempts,
+    enabled: !!shipmentId,
+  });
+}
+
 export function useHubs() {
   return useQuery({
     queryKey: ["hubs"],
@@ -39,7 +55,8 @@ export function useHubs() {
 export function useVehicles() {
   return useQuery({
     queryKey: ["vehicles"],
-    queryFn: async () => (await getJson<{ vehicles: any[] }>("/api/vehicles", { vehicles: [] })).vehicles,
+    queryFn: async () =>
+      (await getJson<{ vehicles: any[] }>("/api/vehicles", { vehicles: [] })).vehicles,
   });
 }
 
@@ -72,7 +89,8 @@ export function usePayments(scope?: "all") {
 export function useAddresses() {
   return useQuery({
     queryKey: ["addresses"],
-    queryFn: async () => (await getJson<{ addresses: any[] }>("/api/addresses", { addresses: [] })).addresses,
+    queryFn: async () =>
+      (await getJson<{ addresses: any[] }>("/api/addresses", { addresses: [] })).addresses,
   });
 }
 
@@ -80,7 +98,8 @@ export function useNotifications() {
   return useQuery({
     queryKey: ["notifications"],
     queryFn: async () =>
-      (await getJson<{ notifications: any[] }>("/api/notifications", { notifications: [] })).notifications,
+      (await getJson<{ notifications: any[] }>("/api/notifications", { notifications: [] }))
+        .notifications,
     refetchInterval: 15000,
   });
 }
@@ -116,8 +135,8 @@ const STATUS_BADGE_MAP: Record<string, string> = {
   out_for_delivery: "out_for_delivery",
   delivery_attempted: "exception",
   delivered: "delivered",
-  returned: "exception",
-  cancelled: "exception",
+  returned: "returned",
+  cancelled: "cancelled",
 };
 
 export function toBadgeStatus(status: string): ShipmentStatus {

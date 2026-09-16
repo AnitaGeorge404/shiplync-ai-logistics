@@ -63,9 +63,9 @@ function AdminNotificationsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-5">
+      <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight">
             Notifications
           </h1>
           <p className="text-xs text-muted-foreground mt-1">
@@ -81,27 +81,27 @@ function AdminNotificationsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Total <Bell className="h-4 w-4 text-foreground" />
+            Total <Bell className="h-4 w-4" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats.total}</div>
+          <div className="text-2xl font-semibold mt-2">{stats.total}</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Unread <Bell className="h-4 w-4 text-foreground" />
+            Unread <Bell className="h-4 w-4" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats.unread}</div>
+          <div className="text-2xl font-semibold mt-2">{stats.unread}</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Medical Alerts <HeartPulse className="h-4 w-4 text-foreground" />
+            Medical Alerts <HeartPulse className="h-4 w-4" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats.medical}</div>
+          <div className="text-2xl font-semibold mt-2">{stats.medical}</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Warnings <AlertTriangle className="h-4 w-4 text-foreground" />
+            Warnings <AlertTriangle className="h-4 w-4" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats.warnings}</div>
+          <div className="text-2xl font-semibold mt-2">{stats.warnings}</div>
         </div>
       </div>
 
@@ -131,9 +131,9 @@ function AdminNotificationsPage() {
         </Select>
       </div>
 
-      <div className="border rounded-lg bg-card overflow-hidden shadow-sm">
+      <div className="border rounded-lg bg-card overflow-hidden">
         <Table>
-          <TableHeader className="bg-muted/40">
+          <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent">
               <TableHead className="text-xs font-medium">Event</TableHead>
               <TableHead className="text-xs font-medium">Type</TableHead>
@@ -151,7 +151,7 @@ function AdminNotificationsPage() {
               </TableRow>
             )}
             {filteredNotifs.map((n: any) => (
-              <TableRow key={n.id} className="text-xs hover:bg-muted/30">
+              <TableRow key={n.id} className="text-xs hover:bg-muted/20">
                 <TableCell className="py-3">
                   <div className="font-medium text-foreground text-xs">{n.title}</div>
                   <div className="text-[11px] text-muted-foreground mt-0.5">{n.message}</div>

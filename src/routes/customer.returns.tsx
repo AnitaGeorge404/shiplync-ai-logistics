@@ -45,7 +45,7 @@ function ReturnsPage() {
           <div className="text-xs uppercase tracking-widest text-muted-foreground">Returns</div>
           <h1 className="font-display text-3xl font-semibold mt-1">Sign in to view returns</h1>
         </div>
-        <div className="card-elevated p-6 sm:p-8 bg-background border rounded-2xl shadow-xl">
+        <div className="card-elevated p-6 sm:p-8">
           <LoginForm compact />
         </div>
       </div>
@@ -98,8 +98,8 @@ function ReturnsPage() {
 
 function Row({ s }: { s: ShipmentRow }) {
   return (
-    <div className="card-elevated p-4 flex items-center justify-between">
-      <div>
+    <div className="card-elevated p-4 flex items-center justify-between gap-3 flex-wrap">
+      <div className="min-w-0">
         <Link
           to="/customer/track/$id"
           params={{ id: s.trackingId }}

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
@@ -15,7 +15,17 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { MapPinned, Plus, Trash2, Star, Pencil } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { MapPinned, Plus, Trash2, Star, Pencil, PackagePlus } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/customer/addresses")({
@@ -55,11 +65,13 @@ const emptyForm = {
 
 function AddressesPage() {
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Address | null>(null);
 
   const { data: addressList = [], isLoading } = useQuery({
     queryKey: ["addresses"],
@@ -122,6 +134,11 @@ function AddressesPage() {
     await fetch(`/api/addresses/${id}`, { method: "DELETE" });
     queryClient.invalidateQueries({ queryKey: ["addresses"] });
     toast.success("Address removed");
+    setDeleteTarget(null);
+  }
+
+  function useForBooking() {
+    navigate({ to: "/customer/book" });
   }
 
   if (!isAuthenticated) {
@@ -131,7 +148,7 @@ function AddressesPage() {
           <div className="text-xs uppercase tracking-widest text-muted-foreground">Saved addresses</div>
           <h1 className="font-display text-3xl font-semibold mt-1">Sign in to manage addresses</h1>
         </div>
-        <div className="card-elevated p-6 sm:p-8 bg-background border rounded-2xl shadow-xl">
+        <div className="card-elevated p-6 sm:p-8">
           <LoginForm compact />
         </div>
       </div>
@@ -252,14 +269,15 @@ function AddressesPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(a)}>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(a)} aria-label="Edit address">
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
                   <Button
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7 text-destructive"
-                    onClick={() => handleDelete(a.id)}
+                    onClick={() => setDeleteTarget(a)}
+                    aria-label="Delete address"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -269,10 +287,33 @@ function AddressesPage() {
               <div className="text-xs text-muted-foreground">
                 {a.line1}{a.line2 ? `, ${a.line2}` : ""}, {a.city}, {a.state} {a.pincode}
               </div>
+              <Button variant="outline" size="sm" className="gap-1.5 mt-1" onClick={useForBooking}>
+                <PackagePlus className="h-3.5 w-3.5" /> Use in a shipment
+              </Button>
             </div>
           ))}
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{deleteTarget?.label}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This saved address will be removed from your account. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteTarget && handleDelete(deleteTarget.id)}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

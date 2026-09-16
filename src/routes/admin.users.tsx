@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { useUsers, useHubs, useQueryClient } from "@/lib/api-hooks";
+import { useUsers, useHubs, useShipments, useQueryClient } from "@/lib/api-hooks";
 import {
   Table,
   TableHeader,
@@ -20,6 +20,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Search, MoreHorizontal, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
@@ -40,13 +50,32 @@ const ROLE_LABEL: Record<string, string> = {
   hub_staff: "Hub Staff",
   admin: "Administrator",
 };
+const ACTIVE_STATUSES = ["picked_up", "arrived_hub", "in_transit", "out_for_delivery", "delivery_attempted"];
 
 function AdminUsersDashboard() {
   const { data: userList = [] } = useUsers();
   const { data: hubsList = [] } = useHubs();
+  const { data: shipments = [] } = useShipments("all");
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [roleTab, setRoleTab] = useState<string>("ALL");
+  const [pendingAdminChange, setPendingAdminChange] = useState<{ id: string; name: string; role: string; hubId?: string } | null>(null);
+
+  const hubById = useMemo(() => new Map(hubsList.map((h: any) => [h.id, h])), [hubsList]);
+
+  const operationalInfo = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const u of userList) {
+      if (u.role === "delivery_agent") {
+        const active = shipments.filter((s: any) => s.assignedAgentId === u.id && ACTIVE_STATUSES.includes(s.status)).length;
+        map.set(u.id, `${active} active shipment${active === 1 ? "" : "s"}`);
+      } else if (u.role === "hub_staff" && u.hubId) {
+        const hub = hubById.get(u.hubId);
+        map.set(u.id, hub ? `${hub.loadPct}% hub load` : "—");
+      }
+    }
+    return map;
+  }, [userList, shipments, hubById]);
 
   const filteredUsers = useMemo(() => {
     return userList.filter((u: any) => {
@@ -68,7 +97,7 @@ function AdminUsersDashboard() {
     };
   }, [userList]);
 
-  const handleRoleChange = async (id: string, role: string, hubId?: string) => {
+  const applyRoleChange = async (id: string, role: string, hubId?: string) => {
     const res = await fetch(`/api/users/${id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -82,11 +111,21 @@ function AdminUsersDashboard() {
     toast.success(`Role updated to ${ROLE_LABEL[role]}`);
   };
 
+  const handleRoleChange = (u: any, role: string, hubId?: string) => {
+    // Granting or revoking admin access is a protected, higher-consequence
+    // action — confirm before applying either direction.
+    if (role === "admin" || u.role === "admin") {
+      setPendingAdminChange({ id: u.id, name: u.name, role, hubId });
+      return;
+    }
+    applyRoleChange(u.id, role, hubId);
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-5">
+      <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Users</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
           <p className="text-xs text-muted-foreground mt-1">
             Real accounts from the database. Manage role assignments (customer, delivery partner, hub staff, admin).
           </p>
@@ -106,7 +145,7 @@ function AdminUsersDashboard() {
             onClick={() => setRoleTab(tab.id)}
             className={`px-3 py-1.5 rounded-md font-medium transition-all whitespace-nowrap ${
               roleTab === tab.id
-                ? "bg-foreground text-background shadow-sm"
+                ? "bg-foreground text-background"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
@@ -125,13 +164,14 @@ function AdminUsersDashboard() {
         />
       </div>
 
-      <div className="border rounded-lg bg-card overflow-hidden shadow-sm">
+      <div className="border rounded-lg bg-card overflow-hidden">
         <Table>
-          <TableHeader className="bg-muted/40">
+          <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent">
               <TableHead className="text-xs font-medium">User</TableHead>
               <TableHead className="text-xs font-medium">Role</TableHead>
               <TableHead className="text-xs font-medium">Hub</TableHead>
+              <TableHead className="text-xs font-medium">Operational</TableHead>
               <TableHead className="text-xs font-medium">Joined</TableHead>
               <TableHead className="w-12 text-right text-xs font-medium"></TableHead>
             </TableRow>
@@ -139,13 +179,13 @@ function AdminUsersDashboard() {
           <TableBody>
             {filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-32 text-center text-xs text-muted-foreground">
+                <TableCell colSpan={6} className="h-32 text-center text-xs text-muted-foreground">
                   No users found.
                 </TableCell>
               </TableRow>
             ) : (
               filteredUsers.map((u: any) => (
-                <TableRow key={u.id} className="text-xs hover:bg-muted/30">
+                <TableRow key={u.id} className="text-xs hover:bg-muted/20">
                   <TableCell className="py-3">
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-8 rounded-full bg-muted border border-border text-foreground font-semibold grid place-items-center text-xs shrink-0">
@@ -165,7 +205,11 @@ function AdminUsersDashboard() {
                   </TableCell>
 
                   <TableCell className="text-xs text-muted-foreground">
-                    {hubsList.find((h: any) => h.id === u.hubId)?.name ?? "—"}
+                    {hubById.get(u.hubId)?.name ?? "—"}
+                  </TableCell>
+
+                  <TableCell className="text-xs text-muted-foreground">
+                    {operationalInfo.get(u.id) ?? "—"}
                   </TableCell>
 
                   <TableCell className="text-xs text-muted-foreground">
@@ -186,7 +230,7 @@ function AdminUsersDashboard() {
                           <DropdownMenuItem
                             key={r}
                             disabled={u.role === r}
-                            onClick={() => handleRoleChange(u.id, r, u.hubId)}
+                            onClick={() => handleRoleChange(u, r, u.hubId)}
                             className="gap-2 text-xs"
                           >
                             <ShieldCheck className="h-3.5 w-3.5" /> {ROLE_LABEL[r]}
@@ -200,7 +244,7 @@ function AdminUsersDashboard() {
                               <DropdownMenuItem
                                 key={h.id}
                                 disabled={u.hubId === h.id}
-                                onClick={() => handleRoleChange(u.id, u.role, h.id)}
+                                onClick={() => applyRoleChange(u.id, u.role, h.id)}
                                 className="gap-2 text-xs"
                               >
                                 <SlidersHorizontal className="h-3.5 w-3.5" /> {h.name}
@@ -223,6 +267,32 @@ function AdminUsersDashboard() {
           </div>
         </div>
       </div>
+
+      <AlertDialog open={!!pendingAdminChange} onOpenChange={(open) => !open && setPendingAdminChange(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingAdminChange?.role === "admin" ? "Grant administrator access?" : "Remove administrator access?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingAdminChange?.role === "admin"
+                ? `${pendingAdminChange?.name} will gain full administrator access to shipments, users, payments, and platform settings.`
+                : `${pendingAdminChange?.name} will lose administrator access immediately.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingAdminChange) applyRoleChange(pendingAdminChange.id, pendingAdminChange.role, pendingAdminChange.hubId);
+                setPendingAdminChange(null);
+              }}
+            >
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

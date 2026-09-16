@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo } from "react";
-import { useShipments, useAdminStats } from "@/lib/api-hooks";
+import { useShipments, useAdminStats, usePayments } from "@/lib/api-hooks";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   BarChart3,
   FileSpreadsheet,
@@ -26,8 +27,8 @@ import {
 export const Route = createFileRoute("/admin/reports")({
   head: () => ({
     meta: [
-      { title: "Reports & Analytics — Admin Dashboard" },
-      { name: "description", content: "Real delivery volume, package mix, and exportable shipment data from the live database." },
+      { title: "Reports — Admin Dashboard" },
+      { name: "description", content: "Shipment, delivery and revenue reports — exportable, real data from the live database." },
     ],
   }),
   component: AdminReportsPage,
@@ -35,6 +36,7 @@ export const Route = createFileRoute("/admin/reports")({
 
 function useRealCharts() {
   const { data: shipments = [] } = useShipments("all");
+  const { data: payments = [] } = usePayments("all");
   return useMemo(() => {
     const byDay = new Map<string, { booked: number; delivered: number }>();
     const byType = new Map<string, number>();
@@ -48,24 +50,32 @@ function useRealCharts() {
     }
     const volume = Array.from(byDay.entries()).map(([day, v]) => ({ day, ...v }));
     const categoryMix = Array.from(byType.entries()).map(([name, value]) => ({ name, value }));
-    return { volume, categoryMix };
-  }, [shipments]);
+
+    const delivered = (shipments as any[]).filter((s) => s.status === "delivered").length;
+    const failed = (shipments as any[]).filter((s) => s.status === "returned" || s.status === "cancelled").length;
+    const inProgress = (shipments as any[]).filter((s) => !["delivered", "returned", "cancelled"].includes(s.status)).length;
+
+    const paymentStatusCounts = (payments as any[]).reduce((acc: Record<string, number>, p) => {
+      acc[p.status] = (acc[p.status] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    return { volume, categoryMix, delivered, failed, inProgress, paymentStatusCounts };
+  }, [shipments, payments]);
 }
 
 function AdminReportsPage() {
   const { data: stats } = useAdminStats();
-  const { volume, categoryMix } = useRealCharts();
+  const { volume, categoryMix, delivered, failed, inProgress, paymentStatusCounts } = useRealCharts();
   const onTimeRate = stats && stats.total > 0 ? Math.round(((stats.total - stats.failed) / stats.total) * 100) : 0;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-5">
+      <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
-            Reports & Analytics
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Real delivery volume, package mix, and exportable data from the live database.
+            Shipment, delivery and revenue reports — computed live from the database, exportable as CSV.
           </p>
         </div>
 
@@ -76,88 +86,129 @@ function AdminReportsPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="border rounded-lg p-4 bg-card">
-          <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Total Shipments <BarChart3 className="h-4 w-4 text-foreground" />
-          </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats?.total ?? 0}</div>
-        </div>
+      <Tabs defaultValue="shipments">
+        <TabsList>
+          <TabsTrigger value="shipments" className="text-xs">Shipment reports</TabsTrigger>
+          <TabsTrigger value="deliveries" className="text-xs">Delivery reports</TabsTrigger>
+          <TabsTrigger value="revenue" className="text-xs">Revenue</TabsTrigger>
+        </TabsList>
 
-        <div className="border rounded-lg p-4 bg-card">
-          <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Non-Failed Rate <CheckCircle2 className="h-4 w-4 text-foreground" />
-          </div>
-          <div className="text-2xl font-semibold font-display mt-2">{onTimeRate}%</div>
-        </div>
-
-        <div className="border rounded-lg p-4 bg-card">
-          <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Avg Delivery Time <Clock className="h-4 w-4 text-foreground" />
-          </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats?.avgDeliveryHours ?? 0} hrs</div>
-        </div>
-
-        <div className="border rounded-lg p-4 bg-card">
-          <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Revenue <IndianRupee className="h-4 w-4 text-foreground" />
-          </div>
-          <div className="text-2xl font-semibold font-display mt-2">₹{(stats?.revenue ?? 0).toLocaleString()}</div>
-        </div>
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-6">
-        <div className="border rounded-lg p-5 bg-card space-y-3">
-          <div className="flex items-center justify-between border-b pb-3">
-            <div>
-              <h2 className="font-display text-base font-semibold text-foreground">
-                Delivery Volume & Outcomes
-              </h2>
-              <p className="text-xs text-muted-foreground">Booked vs delivered, by day of week (real data)</p>
+        <TabsContent value="shipments" className="mt-4 space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="border rounded-lg p-4 bg-card">
+              <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
+                Total Shipments <BarChart3 className="h-4 w-4" />
+              </div>
+              <div className="text-2xl font-semibold mt-2">{stats?.total ?? 0}</div>
             </div>
-            <Badge variant="outline" className="text-[10px] font-normal">
-              <TrendingUp className="h-3 w-3 mr-1" /> Live
-            </Badge>
-          </div>
-
-          <div className="h-64 pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={volume} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
-                <RTooltip contentStyle={{ borderRadius: 8, border: "1px solid var(--border)", background: "var(--card)", fontSize: 12 }} />
-                <Area type="monotone" dataKey="booked" stroke="hsl(var(--primary))" strokeWidth={2} fill="hsl(var(--primary))" fillOpacity={0.1} />
-                <Area type="monotone" dataKey="delivered" stroke="var(--muted-foreground)" strokeWidth={1.5} strokeDasharray="4 4" fill="transparent" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="border rounded-lg p-5 bg-card space-y-3">
-          <div className="flex items-center justify-between border-b pb-3">
-            <div>
-              <h2 className="font-display text-base font-semibold text-foreground">
-                Package Mix
-              </h2>
-              <p className="text-xs text-muted-foreground">Shipments by package type (real data)</p>
+            <div className="border rounded-lg p-4 bg-card">
+              <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
+                Non-Failed Rate <CheckCircle2 className="h-4 w-4" />
+              </div>
+              <div className="text-2xl font-semibold mt-2">{onTimeRate}%</div>
             </div>
-            <Badge variant="outline" className="text-[10px] font-normal">Live</Badge>
+            <div className="border rounded-lg p-4 bg-card">
+              <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
+                Avg Delivery Time <Clock className="h-4 w-4" />
+              </div>
+              <div className="text-2xl font-semibold mt-2">{stats?.avgDeliveryHours ?? 0} hrs</div>
+            </div>
+            <div className="border rounded-lg p-4 bg-card">
+              <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
+                Medical Shipments <IndianRupee className="h-4 w-4" />
+              </div>
+              <div className="text-2xl font-semibold mt-2">{stats?.medical ?? 0}</div>
+            </div>
           </div>
 
-          <div className="h-64 pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={categoryMix} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
-                <RTooltip contentStyle={{ borderRadius: 8, border: "1px solid var(--border)", background: "var(--card)", fontSize: 12 }} />
-                <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="grid lg:grid-cols-2 gap-4">
+            <div className="border rounded-lg p-5 bg-card space-y-3">
+              <div className="flex items-center justify-between border-b pb-3">
+                <div>
+                  <h2 className="text-sm font-semibold">Delivery Volume &amp; Outcomes</h2>
+                  <p className="text-xs text-muted-foreground">Booked vs. delivered, by day of week</p>
+                </div>
+                <Badge variant="outline" className="text-[10px] font-normal"><TrendingUp className="h-3 w-3 mr-1" /> Live</Badge>
+              </div>
+              <div className="h-56 pt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={volume} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                    <RTooltip contentStyle={{ borderRadius: 6, border: "1px solid var(--border)", background: "var(--card)", fontSize: 12 }} />
+                    <Area type="monotone" dataKey="booked" stroke="var(--chart-1)" strokeWidth={2} fill="var(--chart-1)" fillOpacity={0.12} />
+                    <Area type="monotone" dataKey="delivered" stroke="var(--muted-foreground)" strokeWidth={1.5} strokeDasharray="4 4" fill="transparent" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="border rounded-lg p-5 bg-card space-y-3">
+              <div className="flex items-center justify-between border-b pb-3">
+                <div>
+                  <h2 className="text-sm font-semibold">Package Mix</h2>
+                  <p className="text-xs text-muted-foreground">Shipments by package type</p>
+                </div>
+                <Badge variant="outline" className="text-[10px] font-normal">Live</Badge>
+              </div>
+              <div className="h-56 pt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={categoryMix} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                    <RTooltip contentStyle={{ borderRadius: 6, border: "1px solid var(--border)", background: "var(--card)", fontSize: 12 }} />
+                    <Bar dataKey="value" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </TabsContent>
+
+        <TabsContent value="deliveries" className="mt-4 space-y-6">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="border rounded-lg p-4 bg-card">
+              <div className="text-xs text-muted-foreground font-medium">Delivered</div>
+              <div className="text-2xl font-semibold mt-2 text-success">{delivered}</div>
+            </div>
+            <div className="border rounded-lg p-4 bg-card">
+              <div className="text-xs text-muted-foreground font-medium">In progress</div>
+              <div className="text-2xl font-semibold mt-2">{inProgress}</div>
+            </div>
+            <div className="border rounded-lg p-4 bg-card">
+              <div className="text-xs text-muted-foreground font-medium">Failed / returned</div>
+              <div className="text-2xl font-semibold mt-2 text-destructive">{failed}</div>
+            </div>
+          </div>
+          <div className="border rounded-lg p-5 bg-card text-xs text-muted-foreground">
+            Per-agent delivery performance (assigned, completed, pending, failed, success rate) is broken out on the{" "}
+            <a href="/admin/agents" className="text-primary hover:underline">Agents</a> page.
+          </div>
+        </TabsContent>
+
+        <TabsContent value="revenue" className="mt-4 space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="border rounded-lg p-4 bg-card">
+              <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
+                Total Revenue <IndianRupee className="h-4 w-4" />
+              </div>
+              <div className="text-2xl font-semibold mt-2">₹{(stats?.revenue ?? 0).toLocaleString()}</div>
+            </div>
+            {Object.entries(paymentStatusCounts).map(([status, count]) => (
+              <div key={status} className="border rounded-lg p-4 bg-card">
+                <div className="text-xs text-muted-foreground font-medium capitalize">{status} transactions</div>
+                <div className="text-2xl font-semibold mt-2">{count as number}</div>
+              </div>
+            ))}
+          </div>
+          <div className="border rounded-lg p-5 bg-card text-xs text-muted-foreground">
+            Full transaction-level detail, refund logs and per-transaction export are on the{" "}
+            <a href="/admin/payments" className="text-primary hover:underline">Payments</a> page.
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <div className="border rounded-lg p-5 bg-card text-xs text-muted-foreground">
         PDF/Excel report generation and a saved report archive aren't implemented yet — CSV export above is the real,

@@ -1,19 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { useShipments, useAgents, useQueryClient } from "@/lib/api-hooks";
+import { usePagedRows } from "@/hooks/use-paged-rows";
+import { PriorityBadge } from "@/components/shiplync/PriorityBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
-import { Truck, Search, CheckCircle2, Package } from "lucide-react";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink } from "@/components/ui/pagination";
+import { Truck, Search, CheckCircle2, Package, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/hub/dispatch")({
@@ -27,6 +23,9 @@ export const Route = createFileRoute("/hub/dispatch")({
 });
 
 const DISPATCHABLE_STATUSES = ["arrived_hub", "picked_up", "in_transit"];
+const PRIORITY_RANK: Record<string, number> = { critical: 0, high: 1, normal: 2 };
+
+type SortKey = "trackingId" | "receiverCity" | "priority" | "status";
 
 function HubDispatchPage() {
   const { data: hubShipments = [], isLoading } = useShipments("hub");
@@ -36,24 +35,46 @@ function HubDispatchPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedAgentByShipment, setSelectedAgentByShipment] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("priority");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // Shipments already mid hub-to-hub transfer belong on /hub/transfers, not
+  // here — this page is for handing a shipment to a local delivery agent.
+  const dispatchScope = useMemo(() => hubShipments.filter((s: any) => !s.destinationHubId), [hubShipments]);
 
   const filtered = useMemo(() => {
-    return hubShipments.filter((s: any) => {
+    const rows = dispatchScope.filter((s: any) => {
       const matchesSearch =
         s.trackingId.toLowerCase().includes(search.toLowerCase()) ||
         s.receiverCity.toLowerCase().includes(search.toLowerCase());
       const matchesStatus = statusFilter === "ALL" || s.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [hubShipments, search, statusFilter]);
+    const sorted = [...rows].sort((a: any, b: any) => {
+      let cmp = 0;
+      if (sortKey === "priority") cmp = (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2);
+      else cmp = String(a[sortKey]).localeCompare(String(b[sortKey]));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [dispatchScope, search, statusFilter, sortKey, sortDir]);
+
+  const paged = usePagedRows(filtered, 10);
 
   const stats = useMemo(() => {
-    const total = hubShipments.length;
-    const ready = hubShipments.filter((s: any) => s.status === "arrived_hub" && s.assignedAgentId).length;
+    const total = dispatchScope.length;
+    const ready = dispatchScope.filter((s: any) => s.status === "arrived_hub" && s.assignedAgentId).length;
     const dispatched = hubShipments.filter((s: any) => s.status === "out_for_delivery").length;
-    const totalParcels = hubShipments.length;
-    return { total, ready, dispatched, totalParcels };
-  }, [hubShipments]);
+    return { total, ready, dispatched, totalParcels: hubShipments.length };
+  }, [dispatchScope, hubShipments]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
 
   async function assignAndDispatch(shipmentId: string) {
     const agentId = selectedAgentByShipment[shipmentId];
@@ -138,6 +159,16 @@ function HubDispatchPage() {
     }
   }
 
+  function SortHead({ label, sortKeyValue }: { label: string; sortKeyValue: SortKey }) {
+    return (
+      <TableHead className="text-xs font-medium">
+        <button type="button" className="flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort(sortKeyValue)}>
+          {label} <ArrowUpDown className="h-3 w-3 opacity-50" />
+        </button>
+      </TableHead>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-5">
@@ -184,12 +215,12 @@ function HubDispatchPage() {
           <Input
             placeholder="Search tracking ID, destination..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); paged.resetPage(); }}
             className="pl-8 h-9 text-xs bg-background"
           />
         </div>
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); paged.resetPage(); }}>
           <SelectTrigger className="w-[160px] h-9 text-xs bg-background">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -208,30 +239,38 @@ function HubDispatchPage() {
         <Table>
           <TableHeader className="bg-muted/40">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="text-xs font-medium">Tracking ID</TableHead>
-              <TableHead className="text-xs font-medium">Destination</TableHead>
+              <SortHead label="Tracking ID" sortKeyValue="trackingId" />
+              <SortHead label="Destination" sortKeyValue="receiverCity" />
+              <TableHead className="text-xs font-medium">Service</TableHead>
+              <SortHead label="Priority" sortKeyValue="priority" />
               <TableHead className="text-xs font-medium">Assigned Agent</TableHead>
-              <TableHead className="text-xs font-medium">Status</TableHead>
+              <SortHead label="Status" sortKeyValue="status" />
               <TableHead className="w-64 text-right text-xs font-medium">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {!isLoading && filtered.length === 0 && (
+            {!isLoading && paged.pageRows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-8">
+                <TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-8">
                   No shipments at this hub right now.
                 </TableCell>
               </TableRow>
             )}
-            {filtered.map((s: any) => {
+            {paged.pageRows.map((s: any) => {
               const agentName = agents.find((a: any) => a.id === s.assignedAgentId)?.name;
               return (
                 <TableRow key={s.id} className="text-xs hover:bg-muted/30">
                   <TableCell className="py-3.5 font-mono font-semibold text-foreground text-xs">
-                    {s.trackingId}
+                    <Link to="/hub/shipments/$trackingId" params={{ trackingId: s.trackingId }} className="hover:underline">
+                      {s.trackingId}
+                    </Link>
                   </TableCell>
 
                   <TableCell className="font-medium text-foreground text-xs">{s.receiverCity}</TableCell>
+
+                  <TableCell className="text-xs capitalize text-muted-foreground">{s.packageType}</TableCell>
+
+                  <TableCell><PriorityBadge priority={s.priority} /></TableCell>
 
                   <TableCell>
                     {agentName ? (
@@ -246,8 +285,8 @@ function HubDispatchPage() {
                       <span
                         className={`h-2 w-2 rounded-full ${
                           s.status === "out_for_delivery" || s.status === "delivered"
-                            ? "bg-emerald-500"
-                            : "bg-amber-500"
+                            ? "bg-success"
+                            : "bg-warning"
                         }`}
                       />
                       <Badge variant="outline" className="font-normal text-[11px] capitalize">
@@ -326,6 +365,20 @@ function HubDispatchPage() {
           </TableBody>
         </Table>
       </div>
+
+      {paged.pageCount > 1 && (
+        <Pagination>
+          <PaginationContent>
+            {Array.from({ length: paged.pageCount }, (_, i) => i + 1).map((p) => (
+              <PaginationItem key={p}>
+                <PaginationLink isActive={p === paged.page} onClick={(e) => { e.preventDefault(); paged.setPage(p); }} href="#">
+                  {p}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
+          </PaginationContent>
+        </Pagination>
+      )}
     </div>
   );
 }

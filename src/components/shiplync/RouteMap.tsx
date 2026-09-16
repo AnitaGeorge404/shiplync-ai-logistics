@@ -1,25 +1,18 @@
-import { useEffect, useState } from "react";
 import { MapPin, Navigation, Truck } from "lucide-react";
 
 type Props = {
   from: string;
   to: string;
-  progress?: number; // 0-100
+  progress?: number; // 0-100, actual shipment progress — not simulated
   hubs?: { x: number; y: number; label: string }[];
   className?: string;
   compact?: boolean;
 };
 
-// Stylized SVG map — purely visual, works on server & client
-export function RouteMap({ from, to, progress = 60, hubs, className, compact }: Props) {
-  const [p, setP] = useState(progress);
-  useEffect(() => {
-    const t = setInterval(() => {
-      setP((v) => (v >= 99 ? progress : v + 0.15));
-    }, 120);
-    return () => clearInterval(t);
-  }, [progress]);
-
+// Stylized schematic of the route between origin and destination, positioned
+// by the shipment's real progress percentage. Not a live GPS map.
+export function RouteMap({ from, to, progress = 0, hubs, className, compact }: Props) {
+  const p = Math.min(Math.max(progress, 0), 100);
   const path = "M 40 260 C 160 120, 300 340, 460 200 S 720 80, 860 180";
   // approximate coordinate along cubic path
   const t = Math.min(Math.max(p / 100, 0), 1);
@@ -36,8 +29,8 @@ export function RouteMap({ from, to, progress = 60, hubs, className, compact }: 
   const cy = points[idx][1] + (points[idx + 1][1] - points[idx][1]) * localT;
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl border bg-card ${className ?? ""}`}>
-      <div className="absolute inset-0 grid-pattern opacity-40" />
+    <div className={`relative overflow-hidden rounded-lg border bg-card ${className ?? ""}`}>
+      <div className="absolute inset-0 grid-pattern opacity-25" />
       <svg viewBox="0 0 900 380" className="w-full h-full block" preserveAspectRatio="xMidYMid slice">
         {/* landmasses (abstract) */}
         <path
@@ -52,9 +45,9 @@ export function RouteMap({ from, to, progress = 60, hubs, className, compact }: 
         />
 
         {/* full route dim */}
-        <path d="M 40 260 C 160 120, 300 340, 460 200 S 720 80, 860 180" fill="none" stroke="var(--border)" strokeWidth="6" strokeLinecap="round" />
-        {/* animated dashed traveled */}
-        <path d={path} fill="none" stroke="hsl(var(--primary))" strokeWidth="4" strokeLinecap="round" className="route-dash" pathLength={100} strokeDasharray={`${p} ${100 - p}`} />
+        <path d="M 40 260 C 160 120, 300 340, 460 200 S 720 80, 860 180" fill="none" stroke="var(--border)" strokeWidth="5" strokeLinecap="round" />
+        {/* traveled distance */}
+        <path d={path} fill="none" stroke="var(--primary)" strokeWidth="3" strokeLinecap="round" pathLength={100} strokeDasharray={`${p} ${100 - p}`} />
 
         {/* hubs */}
         {(hubs ?? [
@@ -83,9 +76,9 @@ export function RouteMap({ from, to, progress = 60, hubs, className, compact }: 
           <circle cx="860" cy="180" r="8" fill="var(--primary)" />
         </g>
 
-        {/* vehicle */}
+        {/* current position */}
         <g transform={`translate(${cx - 14} ${cy - 14})`}>
-          <circle cx="14" cy="14" r="22" fill="var(--primary)" fillOpacity="0.18" className="animate-pulse-dot" />
+          <circle cx="14" cy="14" r="20" fill="var(--primary)" fillOpacity="0.12" />
           <circle cx="14" cy="14" r="14" fill="var(--primary)" />
           <g transform="translate(6,6)" stroke="white" strokeWidth="1.6" fill="none">
             <path d="M1 8 h9 v-4 h3 l2 3 v5 h-14 z" />
@@ -97,15 +90,15 @@ export function RouteMap({ from, to, progress = 60, hubs, className, compact }: 
 
       {!compact && (
         <>
-          <div className="absolute top-3 left-3 glass rounded-lg px-3 py-2 flex items-center gap-2 text-xs">
+          <div className="absolute top-3 left-3 bg-card border rounded-md px-2.5 py-1.5 flex items-center gap-1.5 text-xs shadow-sm">
             <MapPin className="h-3.5 w-3.5 text-success" />
             <span className="font-medium">{from}</span>
           </div>
-          <div className="absolute top-3 right-3 glass rounded-lg px-3 py-2 flex items-center gap-2 text-xs">
+          <div className="absolute top-3 right-3 bg-card border rounded-md px-2.5 py-1.5 flex items-center gap-1.5 text-xs shadow-sm">
             <Navigation className="h-3.5 w-3.5 text-primary" />
             <span className="font-medium">{to}</span>
           </div>
-          <div className="absolute bottom-3 left-3 glass rounded-lg px-3 py-2 flex items-center gap-2 text-xs">
+          <div className="absolute bottom-3 left-3 bg-card border rounded-md px-2.5 py-1.5 flex items-center gap-1.5 text-xs shadow-sm">
             <Truck className="h-3.5 w-3.5 text-primary" />
             <span className="font-medium">{Math.round(p)}% complete</span>
           </div>

@@ -24,15 +24,11 @@ import {
 import {
   CreditCard,
   Search,
-  Filter,
   MoreHorizontal,
   Download,
   IndianRupee,
   CheckCircle2,
-  Clock,
   RotateCcw,
-  Receipt,
-  ArrowUpRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -76,13 +72,13 @@ function AdminPaymentsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-5">
+      <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
-            Payments & Billing
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Payments &amp; Billing
           </h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Track customer transactions, courier payouts, invoice generation, and refunds.
+            Real customer transactions and courier payout records, from the live database.
           </p>
         </div>
 
@@ -102,31 +98,31 @@ function AdminPaymentsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Settled Volume <IndianRupee className="h-4 w-4 text-foreground" />
+            Settled Volume <IndianRupee className="h-4 w-4" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">
+          <div className="text-2xl font-semibold mt-2">
             ₹{stats.totalVolume.toLocaleString()}
           </div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Total Transactions <CreditCard className="h-4 w-4 text-foreground" />
+            Total Transactions <CreditCard className="h-4 w-4" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats.count}</div>
+          <div className="text-2xl font-semibold mt-2">{stats.count}</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Success Rate <CheckCircle2 className="h-4 w-4 text-foreground" />
+            Success Rate <CheckCircle2 className="h-4 w-4" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">
+          <div className="text-2xl font-semibold mt-2">
             {Math.round((stats.completedCount / (stats.count || 1)) * 100)}%
           </div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Refund Logs <RotateCcw className="h-4 w-4 text-foreground" />
+            Refund Logs <RotateCcw className="h-4 w-4" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats.refundedCount}</div>
+          <div className="text-2xl font-semibold mt-2">{stats.refundedCount}</div>
         </div>
       </div>
 
@@ -157,9 +153,9 @@ function AdminPaymentsPage() {
       </div>
 
       {/* Payments Table */}
-      <div className="border rounded-lg bg-card overflow-hidden shadow-sm">
+      <div className="border rounded-lg bg-card overflow-hidden">
         <Table>
-          <TableHeader className="bg-muted/40">
+          <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent">
               <TableHead className="text-xs font-medium">Transaction Ref</TableHead>
               <TableHead className="text-xs font-medium">Route</TableHead>
@@ -180,7 +176,7 @@ function AdminPaymentsPage() {
               </TableRow>
             )}
             {filteredPayments.map((p: any) => (
-              <TableRow key={p.id} className="text-xs hover:bg-muted/30">
+              <TableRow key={p.id} className="text-xs hover:bg-muted/20">
                 <TableCell className="py-3 font-mono font-semibold text-foreground text-xs">
                   {p.transactionRef}
                 </TableCell>
@@ -208,12 +204,12 @@ function AdminPaymentsPage() {
                     <span
                       className={`h-2 w-2 rounded-full ${
                         p.status === "paid"
-                          ? "bg-emerald-500"
+                          ? "bg-success"
                           : p.status === "pending"
-                          ? "bg-amber-500"
+                          ? "bg-warning"
                           : p.status === "refunded"
-                          ? "bg-blue-500"
-                          : "bg-red-500"
+                          ? "bg-info"
+                          : "bg-destructive"
                       }`}
                     />
                     <span className="font-medium text-xs capitalize">{p.status}</span>
@@ -237,7 +233,7 @@ function AdminPaymentsPage() {
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       {p.status === "paid" && (
-                        <DropdownMenuItem onClick={handleRefund} className="gap-2 text-xs text-amber-600">
+                        <DropdownMenuItem onClick={handleRefund} className="gap-2 text-xs text-warning-foreground">
                           <RotateCcw className="h-3.5 w-3.5" /> Issue Refund
                         </DropdownMenuItem>
                       )}

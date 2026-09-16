@@ -16,8 +16,16 @@ import { auth } from "./auth";
 import { calculateShipmentCost, estimateDeliveryHours, generateTrackingId } from "./pricing";
 import { detectExceptions } from "./exception-detection";
 import { calculateDistance } from "./distance";
-import { phoneSchema, addressLineSchema, citySchema, stateSchema, pincodeSchema, weightSchema, dimensionSchema } from "./validation";
-import { eq, desc, and, isNull, gte, notInArray, sql as dsql } from "drizzle-orm";
+import {
+  phoneSchema,
+  addressLineSchema,
+  citySchema,
+  stateSchema,
+  pincodeSchema,
+  weightSchema,
+  dimensionSchema,
+} from "./validation";
+import { eq, desc, and, or, isNull, isNotNull, gte, notInArray, sql as dsql } from "drizzle-orm";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -114,6 +122,10 @@ const assignSchema = z.object({
   agentId: z.string().optional(),
   vehicleId: z.string().uuid().optional(),
   hubId: z.string().uuid().optional(),
+});
+
+const transferSchema = z.object({
+  destinationHubId: z.string().uuid(),
 });
 
 const addressSchema = z.object({
@@ -291,6 +303,24 @@ export async function handleApiRequest(request: Request): Promise<Response> {
               .where(eq(shipments.currentHubId, hubId))
               .orderBy(desc(shipments.updatedAt))
           : [];
+      } else if (scope === "hub_transfers" && (role === "hub_staff" || role === "admin")) {
+        // Shipments genuinely mid hub-to-hub transfer — either departing this
+        // hub (currentHubId = mine) or inbound to it (destinationHubId =
+        // mine, not yet arrived). Both are real states set by
+        // POST /shipments/:id/transfer and cleared on arrival.
+        const hubId = (user as any).hubId;
+        rows = hubId
+          ? await db
+              .select()
+              .from(shipments)
+              .where(
+                and(
+                  isNotNull(shipments.destinationHubId),
+                  or(eq(shipments.currentHubId, hubId), eq(shipments.destinationHubId, hubId)),
+                ),
+              )
+              .orderBy(desc(shipments.updatedAt))
+          : [];
       } else if (scope === "unassigned" && (role === "hub_staff" || role === "admin")) {
         rows = await db
           .select()
@@ -332,11 +362,30 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       // show "Arrived at <Hub Name>" instead of a generic status string.
       let currentHubName: string | null = null;
       if (shipment.currentHubId) {
-        const [hub] = await db.select({ name: hubs.name }).from(hubs).where(eq(hubs.id, shipment.currentHubId)).limit(1);
+        const [hub] = await db
+          .select({ name: hubs.name })
+          .from(hubs)
+          .where(eq(hubs.id, shipment.currentHubId))
+          .limit(1);
         currentHubName = hub?.name ?? null;
       }
 
-      return json({ shipment, events, currentHubName });
+      // Real delivery-attempt and exception records for this shipment, so
+      // the customer tracking page can show them alongside the event
+      // timeline instead of only inferring them from status strings.
+      const attempts = await db
+        .select()
+        .from(deliveryAttempts)
+        .where(eq(deliveryAttempts.shipmentId, shipment.id))
+        .orderBy(deliveryAttempts.attemptNumber);
+
+      const shipmentExceptions = await db
+        .select()
+        .from(exceptions)
+        .where(eq(exceptions.shipmentId, shipment.id))
+        .orderBy(desc(exceptions.createdAt));
+
+      return json({ shipment, events, currentHubName, attempts, exceptions: shipmentExceptions });
     }
 
     // PATCH /api/shipments/:id/status — delivery_agent, hub_staff, admin
@@ -348,9 +397,14 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       const shipmentId = parts[2];
       const body = await request.json();
       const parsed = updateStatusSchema.safeParse(body);
-      if (!parsed.success) return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      if (!parsed.success)
+        return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
 
-      const [existing] = await db.select().from(shipments).where(eq(shipments.id, shipmentId)).limit(1);
+      const [existing] = await db
+        .select()
+        .from(shipments)
+        .where(eq(shipments.id, shipmentId))
+        .limit(1);
       if (!existing) return json({ error: "Shipment not found" }, 404);
 
       if ((user as any).role === "delivery_agent" && existing.assignedAgentId !== user!.id) {
@@ -381,11 +435,33 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       // "current hub" actually reflect reality instead of staying null
       // forever (previously nothing in the real flow ever set this).
       let eventLocation = parsed.data.location;
-      if (parsed.data.status === "arrived_hub" && (user as any).role === "hub_staff" && (user as any).hubId) {
+      let eventNote = parsed.data.note;
+      if (
+        parsed.data.status === "arrived_hub" &&
+        (user as any).role === "hub_staff" &&
+        (user as any).hubId
+      ) {
         updates.currentHubId = (user as any).hubId;
         if (!existing.originHubId) updates.originHubId = (user as any).hubId;
-        const [actorHub] = await db.select({ name: hubs.name }).from(hubs).where(eq(hubs.id, (user as any).hubId)).limit(1);
+        const [actorHub] = await db
+          .select({ name: hubs.name })
+          .from(hubs)
+          .where(eq(hubs.id, (user as any).hubId))
+          .limit(1);
         if (actorHub) eventLocation = actorHub.name;
+
+        // A shipment mid hub-to-hub transfer (see POST .../transfer) finishes
+        // that leg the moment it's scanned in anywhere — clear
+        // destinationHubId so it drops off /hub/transfers. If this isn't the
+        // hub it was actually being sent to, staff see that on arrival and
+        // can start a fresh transfer leg from here.
+        if (existing.destinationHubId) {
+          updates.destinationHubId = null;
+          eventNote =
+            existing.destinationHubId === (user as any).hubId
+              ? "Transfer complete — arrived at intended destination hub."
+              : `Arrived at an intermediate hub, not the intended transfer destination.${eventNote ? ` ${eventNote}` : ""}`;
+        }
       }
 
       const [updated] = await db
@@ -398,7 +474,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         shipmentId,
         status: parsed.data.status,
         location: eventLocation,
-        note: parsed.data.note,
+        note: eventNote,
         actorUserId: user!.id,
       });
 
@@ -413,6 +489,87 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       return json({ shipment: updated });
     }
 
+    // POST /api/shipments/:id/transfer — hub_staff, admin. Starts a real
+    // hub-to-hub transfer leg: sets destinationHubId and moves the shipment
+    // to "in_transit" (an already-allowed transition from arrived_hub /
+    // picked_up), rather than the dead "Reroute Volume" stub that used to
+    // live on /hub/load.
+    if (parts[1] === "shipments" && parts[3] === "transfer" && request.method === "POST") {
+      const user = await getSessionUser(request);
+      if (!requireRole(user, ["hub_staff", "admin"])) return json({ error: "Not authorized" }, 403);
+
+      const shipmentId = parts[2];
+      const body = await request.json();
+      const parsed = transferSchema.safeParse(body);
+      if (!parsed.success)
+        return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+
+      const [existing] = await db
+        .select()
+        .from(shipments)
+        .where(eq(shipments.id, shipmentId))
+        .limit(1);
+      if (!existing) return json({ error: "Shipment not found" }, 404);
+
+      const actingHubId =
+        (user as any).role === "hub_staff" ? (user as any).hubId : existing.currentHubId;
+      if (!actingHubId || existing.currentHubId !== actingHubId) {
+        return json({ error: "This shipment isn't at your hub" }, 403);
+      }
+      if (parsed.data.destinationHubId === actingHubId) {
+        return json({ error: "Destination hub must be different from the current hub" }, 400);
+      }
+
+      const [destinationHub] = await db
+        .select()
+        .from(hubs)
+        .where(eq(hubs.id, parsed.data.destinationHubId))
+        .limit(1);
+      if (!destinationHub) return json({ error: "Destination hub not found" }, 404);
+
+      const allowedNext = ALLOWED_TRANSITIONS[existing.status] ?? [];
+      if (!allowedNext.includes("in_transit")) {
+        return json(
+          {
+            error: `Invalid transition: cannot move from "${existing.status}" to "in_transit"`,
+            allowedNext,
+          },
+          409,
+        );
+      }
+
+      const [originHub] = await db.select().from(hubs).where(eq(hubs.id, actingHubId)).limit(1);
+
+      const [updated] = await db
+        .update(shipments)
+        .set({
+          status: "in_transit",
+          destinationHubId: parsed.data.destinationHubId,
+          updatedAt: new Date(),
+        })
+        .where(eq(shipments.id, shipmentId))
+        .returning();
+
+      await db.insert(shipmentEvents).values({
+        shipmentId,
+        status: "in_transit",
+        location:
+          originHub && destinationHub ? `${originHub.name} → ${destinationHub.name}` : undefined,
+        note: "Hub transfer initiated.",
+        actorUserId: user!.id,
+      });
+
+      await db.insert(notifications).values({
+        userId: existing.customerId,
+        type: "hub_transferred",
+        title: `Shipment ${existing.trackingId} is being transferred`,
+        message: `Now moving from ${originHub?.name ?? "your origin hub"} to ${destinationHub.name}.`,
+        shipmentId,
+      });
+
+      return json({ shipment: updated });
+    }
+
     // POST /api/shipments/:id/assign — hub_staff, admin
     if (parts[1] === "shipments" && parts[3] === "assign" && request.method === "POST") {
       const user = await getSessionUser(request);
@@ -421,9 +578,14 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       const shipmentId = parts[2];
       const body = await request.json();
       const parsed = assignSchema.safeParse(body);
-      if (!parsed.success) return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      if (!parsed.success)
+        return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
 
-      const [existing] = await db.select().from(shipments).where(eq(shipments.id, shipmentId)).limit(1);
+      const [existing] = await db
+        .select()
+        .from(shipments)
+        .where(eq(shipments.id, shipmentId))
+        .limit(1);
       if (!existing) return json({ error: "Shipment not found" }, 404);
 
       const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -460,14 +622,20 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     // POST /api/shipments/:id/attempts — delivery_agent
     if (parts[1] === "shipments" && parts[3] === "attempts" && request.method === "POST") {
       const user = await getSessionUser(request);
-      if (!requireRole(user, ["delivery_agent", "admin"])) return json({ error: "Not authorized" }, 403);
+      if (!requireRole(user, ["delivery_agent", "admin"]))
+        return json({ error: "Not authorized" }, 403);
 
       const shipmentId = parts[2];
       const body = await request.json();
       const parsed = attemptSchema.safeParse(body);
-      if (!parsed.success) return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      if (!parsed.success)
+        return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
 
-      const [existing] = await db.select().from(shipments).where(eq(shipments.id, shipmentId)).limit(1);
+      const [existing] = await db
+        .select()
+        .from(shipments)
+        .where(eq(shipments.id, shipmentId))
+        .limit(1);
       if (!existing) return json({ error: "Shipment not found" }, 404);
 
       if ((user as any).role === "delivery_agent" && existing.assignedAgentId !== user!.id) {
@@ -476,7 +644,9 @@ export async function handleApiRequest(request: Request): Promise<Response> {
 
       if (!["out_for_delivery", "delivery_attempted"].includes(existing.status)) {
         return json(
-          { error: `Cannot record a delivery attempt while shipment is "${existing.status}" — it must be out for delivery first.` },
+          {
+            error: `Cannot record a delivery attempt while shipment is "${existing.status}" — it must be out for delivery first.`,
+          },
           409,
         );
       }
@@ -513,7 +683,9 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       await db.insert(shipmentEvents).values({
         shipmentId,
         status: nextStatus,
-        note: parsed.data.reason ?? `Delivery attempt #${attempt.attemptNumber}: ${parsed.data.outcome}`,
+        note:
+          parsed.data.reason ??
+          `Delivery attempt #${attempt.attemptNumber}: ${parsed.data.outcome}`,
         actorUserId: user!.id,
       });
 
@@ -521,11 +693,41 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         userId: existing.customerId,
         type: nextStatus === "delivered" ? "delivered" : "delivery_failed",
         title: `Shipment ${existing.trackingId} — ${parsed.data.outcome.replace(/_/g, " ")}`,
-        message: parsed.data.reason ?? `Delivery outcome: ${parsed.data.outcome.replace(/_/g, " ")}.`,
+        message:
+          parsed.data.reason ?? `Delivery outcome: ${parsed.data.outcome.replace(/_/g, " ")}.`,
         shipmentId,
       });
 
       return json({ attempt }, 201);
+    }
+
+    // GET /api/shipments/:id/attempts — delivery_agent (own shipments),
+    // hub_staff/admin. Powers the "Attempts" history on the delivery-agent
+    // shipment detail screen.
+    if (parts[1] === "shipments" && parts[3] === "attempts" && request.method === "GET") {
+      const user = await getSessionUser(request);
+      if (!requireRole(user, ["delivery_agent", "hub_staff", "admin"])) {
+        return json({ error: "Not authorized" }, 403);
+      }
+      const shipmentId = parts[2];
+      const [existing] = await db
+        .select()
+        .from(shipments)
+        .where(eq(shipments.id, shipmentId))
+        .limit(1);
+      if (!existing) return json({ error: "Shipment not found" }, 404);
+
+      if ((user as any).role === "delivery_agent" && existing.assignedAgentId !== user!.id) {
+        return json({ error: "Not authorized — this shipment isn't assigned to you" }, 403);
+      }
+
+      const rows = await db
+        .select()
+        .from(deliveryAttempts)
+        .where(eq(deliveryAttempts.shipmentId, shipmentId))
+        .orderBy(deliveryAttempts.attemptNumber);
+
+      return json({ attempts: rows });
     }
 
     // ---------------------------------------------------------------
@@ -585,6 +787,34 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       }
 
       if (!requireRole(user, ["hub_staff", "admin"])) return json({ error: "Not authorized" }, 403);
+
+      // hub_staff only see exceptions for shipments physically at their own
+      // hub — exceptions.hubId is never populated by detectExceptions(), so
+      // scoping has to go through the shipment's real currentHubId instead.
+      // admin keeps the unscoped network-wide view.
+      if ((user as any).role === "hub_staff") {
+        const hubId = (user as any).hubId;
+        if (!hubId) return json({ exceptions: [] });
+        const rows = await db
+          .select({
+            id: exceptions.id,
+            shipmentId: exceptions.shipmentId,
+            hubId: exceptions.hubId,
+            type: exceptions.type,
+            severity: exceptions.severity,
+            message: exceptions.message,
+            resolved: exceptions.resolved,
+            createdAt: exceptions.createdAt,
+            trackingId: shipments.trackingId,
+          })
+          .from(exceptions)
+          .innerJoin(shipments, eq(exceptions.shipmentId, shipments.id))
+          .where(and(eq(shipments.currentHubId, hubId), eq(exceptions.resolved, false)))
+          .orderBy(desc(exceptions.createdAt))
+          .limit(100);
+        return json({ exceptions: rows });
+      }
+
       const rows = await db
         .select()
         .from(exceptions)
@@ -661,7 +891,10 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         return {
           ...h,
           activeShipmentCount,
-          loadPct: h.capacity > 0 ? Math.min(100, Math.round((activeShipmentCount / h.capacity) * 100)) : 0,
+          loadPct:
+            h.capacity > 0
+              ? Math.min(100, Math.round((activeShipmentCount / h.capacity) * 100))
+              : 0,
         };
       });
 
@@ -673,7 +906,8 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       if (!requireRole(user, ["admin"])) return json({ error: "Not authorized" }, 403);
       const body = await request.json();
       const parsed = hubSchema.safeParse(body);
-      if (!parsed.success) return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      if (!parsed.success)
+        return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
       const [hub] = await db.insert(hubs).values(parsed.data).returning();
       return json({ hub }, 201);
     }
@@ -688,16 +922,37 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       if (!requireRole(user, ["admin"])) return json({ error: "Not authorized" }, 403);
       const body = await request.json();
       const parsed = vehicleSchema.safeParse(body);
-      if (!parsed.success) return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      if (!parsed.success)
+        return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
       const [vehicle] = await db.insert(vehicles).values(parsed.data).returning();
       return json({ vehicle }, 201);
     }
 
     if (parts[1] === "agents" && request.method === "GET") {
+      // No auth was required here before this change and still isn't — this
+      // just narrows the result for a recognized hub_staff session (their
+      // own hub's roster + the unassigned pool) instead of always returning
+      // every delivery agent network-wide. Every other caller (admin,
+      // unauthenticated) keeps the exact same unscoped list as before.
+      const user = await getSessionUser(request).catch(() => null);
+      const hubFilter =
+        user && (user as any).role === "hub_staff" && (user as any).hubId
+          ? or(eq(userTable.hubId, (user as any).hubId), isNull(userTable.hubId))
+          : undefined;
+
       const rows = await db
-        .select({ id: userTable.id, name: userTable.name, phone: userTable.phone, hubId: userTable.hubId })
+        .select({
+          id: userTable.id,
+          name: userTable.name,
+          phone: userTable.phone,
+          hubId: userTable.hubId,
+        })
         .from(userTable)
-        .where(eq(userTable.role, "delivery_agent"));
+        .where(
+          hubFilter
+            ? and(eq(userTable.role, "delivery_agent"), hubFilter)
+            : eq(userTable.role, "delivery_agent"),
+        );
       return json({ agents: rows });
     }
 
@@ -727,7 +982,8 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       if (!requireRole(user, ["admin"])) return json({ error: "Not authorized" }, 403);
       const body = await request.json();
       const parsed = userRoleSchema.safeParse(body);
-      if (!parsed.success) return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      if (!parsed.success)
+        return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
       const [updated] = await db
         .update(userTable)
         .set({ role: parsed.data.role, hubId: parsed.data.hubId, updatedAt: new Date() })
@@ -761,14 +1017,17 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         ["picked_up", "arrived_hub", "in_transit", "out_for_delivery"].includes(s.status),
       ).length;
       const pending = all.filter((s) => ["booked", "payment_completed"].includes(s.status)).length;
-      const failed = all.filter((s) => ["returned", "cancelled", "delivery_attempted"].includes(s.status)).length;
+      const failed = all.filter((s) =>
+        ["returned", "cancelled", "delivery_attempted"].includes(s.status),
+      ).length;
       const medical = all.filter((s) => s.packageType === "medical").length;
 
       const deliveredWithTimes = all.filter((s) => s.deliveredAt);
       const avgDeliveryHours =
         deliveredWithTimes.length > 0
           ? deliveredWithTimes.reduce(
-              (acc, s) => acc + (s.deliveredAt!.getTime() - s.createdAt.getTime()) / (1000 * 60 * 60),
+              (acc, s) =>
+                acc + (s.deliveredAt!.getTime() - s.createdAt.getTime()) / (1000 * 60 * 60),
               0,
             ) / deliveredWithTimes.length
           : 0;
@@ -782,9 +1041,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       const allVehicles = await db.select().from(vehicles);
       const fleetUtilization =
         allVehicles.length > 0
-          ? Math.round(
-              (all.filter((s) => s.assignedVehicleId).length / allVehicles.length) * 100,
-            )
+          ? Math.round((all.filter((s) => s.assignedVehicleId).length / allVehicles.length) * 100)
           : 0;
 
       return json({
@@ -819,7 +1076,8 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       if (!user) return json({ error: "Not authenticated" }, 401);
       const body = await request.json();
       const parsed = addressSchema.safeParse(body);
-      if (!parsed.success) return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      if (!parsed.success)
+        return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
 
       if (parsed.data.isDefault) {
         await db.update(addresses).set({ isDefault: false }).where(eq(addresses.userId, user.id));
@@ -837,7 +1095,8 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       if (!user) return json({ error: "Not authenticated" }, 401);
       const body = await request.json();
       const parsed = addressSchema.partial().safeParse(body);
-      if (!parsed.success) return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      if (!parsed.success)
+        return json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
 
       if (parsed.data.isDefault) {
         await db.update(addresses).set({ isDefault: false }).where(eq(addresses.userId, user.id));
@@ -888,7 +1147,9 @@ export async function handleApiRequest(request: Request): Promise<Response> {
 
       const rows = isAdminAll
         ? await baseQuery.orderBy(desc(payments.createdAt)).limit(300)
-        : await baseQuery.where(eq(shipments.customerId, user.id)).orderBy(desc(payments.createdAt));
+        : await baseQuery
+            .where(eq(shipments.customerId, user.id))
+            .orderBy(desc(payments.createdAt));
 
       return json({ payments: rows });
     }

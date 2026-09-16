@@ -5,7 +5,14 @@
       "name": "shiplync-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 8080
+      "port": 8080,
+      "autoPort": true
+    },
+    {
+      "name": "shiplync-dev-verify",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "8081", "--strictPort"],
+      "port": 8081
     }
   ]
 }

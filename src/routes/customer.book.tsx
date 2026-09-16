@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, MapPin, Package, CreditCard, Sparkles, ShieldCheck, Zap, Leaf, ArrowRight, Copy, Route as RouteIcon } from "lucide-react";
+import { Check, MapPin, Package, CreditCard, Lightbulb, ShieldCheck, Zap, Leaf, ArrowRight, Copy, Route as RouteIcon } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { calculateShipmentCost, estimateDeliveryHours } from "@/lib/pricing";
@@ -25,7 +25,7 @@ export const Route = createFileRoute("/customer/book")({
   component: BookShipment,
 });
 
-const steps = ["Addresses", "Parcel", "Cost", "Confirm"];
+const steps = ["Addresses", "Package", "Service", "Review"];
 
 type Party = {
   name: string;
@@ -233,7 +233,7 @@ function BookShipment() {
           <div className="text-xs uppercase tracking-widest text-muted-foreground">New shipment</div>
           <h1 className="font-display text-3xl font-semibold mt-1">Book a Shipment</h1>
         </div>
-        <div className="card-elevated p-6 sm:p-8 bg-background border rounded-2xl shadow-xl">
+        <div className="card-elevated p-6 sm:p-8">
           <LoginForm
             title="Sign in to continue"
             subtitle="Please sign in or create an account to book your shipment and track deliveries."
@@ -265,8 +265,8 @@ function BookShipment() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 card-elevated p-6 space-y-6">
+      <div className={step === 3 ? "max-w-2xl mx-auto" : "grid lg:grid-cols-3 gap-6"}>
+        <div className={step === 3 ? "card-elevated p-6 space-y-6" : "lg:col-span-2 card-elevated p-6 space-y-6"}>
           {step === 0 && (
             <div className="space-y-6">
               <PartyForm
@@ -449,40 +449,42 @@ function BookShipment() {
           )}
         </div>
 
-        <div className="space-y-4">
-          <div className="card-elevated p-5">
-            <div className="flex items-center gap-2 text-sm font-medium"><Sparkles className="h-4 w-4 text-primary" /> Recommendations</div>
-            <ul className="mt-3 space-y-3 text-xs">
-              {recommendations.map((r) => (
-                <li key={r.title}>
-                  <div className="text-foreground font-medium">{r.title}</div>
-                  <div className="text-muted-foreground mt-0.5">{r.detail}</div>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="card-elevated p-5">
-            <div className="text-sm font-medium flex items-center gap-2"><CreditCard className="h-4 w-4" /> Payment</div>
-            <div className="mt-3 space-y-2 text-sm">
-              <label className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer">
-                <input type="radio" defaultChecked name="pay" /> UPI
-              </label>
-              <label className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer">
-                <input type="radio" name="pay" /> Card
-              </label>
-              <label className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer">
-                <input type="radio" name="pay" /> Cash on pickup
-              </label>
+        {step !== 3 && (
+          <div className="space-y-4">
+            <div className="card-elevated p-5">
+              <div className="flex items-center gap-2 text-sm font-medium"><Lightbulb className="h-4 w-4 text-primary" /> Recommendations</div>
+              <ul className="mt-3 space-y-3 text-xs">
+                {recommendations.map((r) => (
+                  <li key={r.title}>
+                    <div className="text-foreground font-medium">{r.title}</div>
+                    <div className="text-muted-foreground mt-0.5">{r.detail}</div>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-2">
-              No payment gateway is connected in this build — the shipment is recorded as paid without an actual charge.
-            </p>
+            <div className="card-elevated p-5">
+              <div className="text-sm font-medium flex items-center gap-2"><CreditCard className="h-4 w-4" /> Payment</div>
+              <div className="mt-3 space-y-2 text-sm">
+                <label className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer">
+                  <input type="radio" defaultChecked name="pay" /> UPI
+                </label>
+                <label className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer">
+                  <input type="radio" name="pay" /> Card
+                </label>
+                <label className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer">
+                  <input type="radio" name="pay" /> Cash on pickup
+                </label>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-2">
+                No payment gateway is connected in this build — the shipment is recorded as paid without an actual charge.
+              </p>
+            </div>
+            <div className="rounded-xl border p-4 bg-success/5">
+              <div className="text-xs font-medium text-success flex items-center gap-1.5"><Leaf className="h-3.5 w-3.5" /> Carbon-neutral</div>
+              <div className="text-xs text-muted-foreground mt-1">Every ShipLync delivery is offset via verified reforestation partners.</div>
+            </div>
           </div>
-          <div className="rounded-xl border p-4 bg-success/5">
-            <div className="text-xs font-medium text-success flex items-center gap-1.5"><Leaf className="h-3.5 w-3.5" /> Carbon-neutral</div>
-            <div className="text-xs text-muted-foreground mt-1">Every ShipLync delivery is offset via verified reforestation partners.</div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

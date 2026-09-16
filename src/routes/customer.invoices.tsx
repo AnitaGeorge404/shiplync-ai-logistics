@@ -51,7 +51,7 @@ function InvoicesPage() {
           <div className="text-xs uppercase tracking-widest text-muted-foreground">Invoices</div>
           <h1 className="font-display text-3xl font-semibold mt-1">Sign in to view invoices</h1>
         </div>
-        <div className="card-elevated p-6 sm:p-8 bg-background border rounded-2xl shadow-xl">
+        <div className="card-elevated p-6 sm:p-8">
           <LoginForm compact />
         </div>
       </div>
@@ -77,54 +77,76 @@ function InvoicesPage() {
           <div className="text-sm text-muted-foreground mt-1">Book a shipment to generate your first invoice.</div>
         </div>
       ) : (
-        <div className="card-elevated overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="text-left px-5 py-3">Invoice</th>
-                <th className="text-left px-5 py-3">Shipment</th>
-                <th className="text-left px-5 py-3">Date</th>
-                <th className="text-right px-5 py-3">Amount</th>
-                <th className="text-right px-5 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {shipments.map((s) => (
-                <tr key={s.id} className="hover:bg-muted/30">
-                  <td className="px-5 py-4 font-mono text-xs font-medium">
-                    {invoiceNumber(s.trackingId, s.createdAt)}
-                  </td>
-                  <td className="px-5 py-4">
-                    <Link
-                      to="/customer/track/$id"
-                      params={{ id: s.trackingId }}
-                      className="font-mono text-xs text-primary hover:underline"
-                    >
-                      {s.trackingId}
-                    </Link>
-                    <div className="text-xs text-muted-foreground">
-                      {s.senderCity} → {s.receiverCity} · {s.packageType}
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 text-xs text-muted-foreground">
-                    {new Date(s.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-5 py-4 text-right font-medium">₹{s.cost.toFixed(2)}</td>
-                  <td className="px-5 py-4 text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs gap-1.5"
-                      onClick={() => window.print()}
-                    >
-                      <Download className="h-3.5 w-3.5" /> Print
-                    </Button>
-                  </td>
+        <>
+          <div className="card-elevated overflow-hidden hidden md:block">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="text-left px-5 py-3">Invoice</th>
+                  <th className="text-left px-5 py-3">Shipment</th>
+                  <th className="text-left px-5 py-3">Date</th>
+                  <th className="text-right px-5 py-3">Amount</th>
+                  <th className="text-right px-5 py-3"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y">
+                {shipments.map((s) => (
+                  <tr key={s.id} className="hover:bg-muted/30">
+                    <td className="px-5 py-4 font-mono text-xs font-medium">
+                      {invoiceNumber(s.trackingId, s.createdAt)}
+                    </td>
+                    <td className="px-5 py-4">
+                      <Link
+                        to="/customer/track/$id"
+                        params={{ id: s.trackingId }}
+                        className="font-mono text-xs text-primary hover:underline"
+                      >
+                        {s.trackingId}
+                      </Link>
+                      <div className="text-xs text-muted-foreground">
+                        {s.senderCity} → {s.receiverCity} · {s.packageType}
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 text-xs text-muted-foreground">
+                      {new Date(s.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-5 py-4 text-right font-medium">₹{s.cost.toFixed(2)}</td>
+                    <td className="px-5 py-4 text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1.5"
+                        onClick={() => window.print()}
+                      >
+                        <Download className="h-3.5 w-3.5" /> Print
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="space-y-3 md:hidden">
+            {shipments.map((s) => (
+              <div key={s.id} className="card-elevated p-4 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs font-medium">{invoiceNumber(s.trackingId, s.createdAt)}</span>
+                  <span className="font-medium">₹{s.cost.toFixed(2)}</span>
+                </div>
+                <Link to="/customer/track/$id" params={{ id: s.trackingId }} className="font-mono text-xs text-primary hover:underline block">
+                  {s.trackingId}
+                </Link>
+                <div className="text-xs text-muted-foreground">
+                  {s.senderCity} → {s.receiverCity} · {s.packageType} · {new Date(s.createdAt).toLocaleDateString()}
+                </div>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 w-full" onClick={() => window.print()}>
+                  <Download className="h-3.5 w-3.5" /> Print
+                </Button>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

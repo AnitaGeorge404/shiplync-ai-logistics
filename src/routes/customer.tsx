@@ -18,7 +18,6 @@ export const Route = createFileRoute("/customer")({
     <RequireAuth roles={["customer"]}>
       <PortalShell
         portal="Customer"
-        accent="oklch(0.52 0.19 258)"
         nav={[
           { to: "/customer", label: "Dashboard", icon: <Home /> },
           { to: "/customer/book", label: "Book shipment", icon: <PackagePlus />, badge: "New" },

@@ -6,7 +6,8 @@ export type ShipmentStatus =
   | "out_for_delivery"
   | "delivered"
   | "exception"
-  | "returned";
+  | "returned"
+  | "cancelled";
 
 export type Shipment = {
   id: string;
@@ -152,8 +153,9 @@ export const statusLabel: Record<ShipmentStatus, string> = {
   in_transit: "In transit",
   out_for_delivery: "Out for delivery",
   delivered: "Delivered",
-  exception: "Exception",
+  exception: "Failed",
   returned: "Returned",
+  cancelled: "Cancelled",
 };
 
 export const timeline = (s: Shipment) => {

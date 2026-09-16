@@ -1,348 +1,197 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { useShipments } from "@/lib/api-hooks";
+import {
+  sortByPriorityAndEta,
+  formatEta,
+  fullAddress,
+  mapsHref,
+  telHref,
+  type RealShipment,
+} from "@/lib/driver";
+import { StatusTag, PriorityTag } from "@/components/shiplync/driver/Tags";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Route as RouteIcon,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Navigation,
   Phone,
-  MessageSquare,
-  CheckCircle2,
-  Clock,
-  Sparkles,
-  MapPin,
-  ShieldCheck,
-  KeyRound,
+  PartyPopper,
 } from "lucide-react";
-import { toast } from "sonner";
-import { useShipments, useQueryClient } from "@/lib/api-hooks";
 
 export const Route = createFileRoute("/driver/my-route")({
   head: () => ({
     meta: [
       { title: "My Route — Delivery Partner" },
-      { name: "description", content: "GPS turn-by-turn route, stop sequence, recipient contact, and one-tap delivery completion." },
+      {
+        name: "description",
+        content: "Today's stop sequence — next delivery, upcoming stops, and completed drops.",
+      },
     ],
   }),
   component: DriverRoutePage,
 });
 
-export interface RouteStop {
-  stopNum: number;
-  id: string;
-  tracking: string;
-  recipient: string;
-  address: string;
-  phone: string;
-  type: string;
-  medical: boolean;
-  eta: string;
-  cod: number;
-  status: "Completed" | "Next Stop" | "Pending";
-}
-
-function useRouteStops(): RouteStop[] {
-  const { data: assigned = [] } = useShipments("assigned");
-  let nextAssigned = false;
-  return assigned.map((s: any, i: number) => {
-    const status: RouteStop["status"] =
-      s.status === "delivered" ? "Completed" : !nextAssigned && (nextAssigned = true) ? "Next Stop" : "Pending";
-    return {
-      stopNum: i + 1,
-      id: s.id,
-      tracking: s.trackingId,
-      recipient: s.receiverName,
-      address: `${s.receiverAddressLine}, ${s.receiverCity}`,
-      phone: s.receiverPhone,
-      type: s.packageType,
-      medical: s.packageType === "medical",
-      eta: s.status === "delivered" ? "Delivered" : s.estimatedDeliveryAt ? new Date(s.estimatedDeliveryAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "TBD",
-      cod: 0,
-      status,
-    };
-  });
-}
-
 function DriverRoutePage() {
-  const stops = useRouteStops();
-  const queryClient = useQueryClient();
-  const [isPodOpen, setIsPodOpen] = useState(false);
-  const [activeStop, setActiveStop] = useState<RouteStop | null>(null);
-  const [otpInput, setOtpInput] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const nextStop = stops.find((s) => s.status === "Next Stop") || stops.find((s) => s.status === "Pending");
-  const completedCount = stops.filter((s) => s.status === "Completed").length;
-
-  const handleStartNav = (address: string) => {
-    toast.success(`Opening Turn-by-Turn GPS Navigation to ${address}...`);
+  const { data: assigned = [], isLoading } = useShipments("assigned") as {
+    data: RealShipment[];
+    isLoading: boolean;
   };
+  const [showCompleted, setShowCompleted] = useState(false);
 
-  const handleCall = (recipient: string, phone: string) => {
-    toast.info(`Calling ${recipient} (${phone})...`);
-  };
-
-  const handleCompletePodSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeStop) return;
-    setSubmitting(true);
-    try {
-      const res = await fetch(`/api/shipments/${activeStop.id}/attempts`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          outcome: "delivered",
-          reason: `OTP ${otpInput} verified by delivery agent.`,
-          otpVerified: true,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        toast.error(data.error || "Could not complete delivery");
-        return;
-      }
-      queryClient.invalidateQueries({ queryKey: ["shipments", "assigned"] });
-      setIsPodOpen(false);
-      setOtpInput("");
-      toast.success(`Delivery completed for ${activeStop.recipient}! POD & OTP recorded.`);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleAIReorder = () => {
-    toast.info("AI recalculating shortest traffic route...");
-    setTimeout(() => {
-      toast.success("Route re-sequenced! Saved 3.2 km avoiding Silk Board traffic.");
-    }, 500);
-  };
+  const active = sortByPriorityAndEta(
+    assigned.filter(
+      (s) => s.status !== "delivered" && s.status !== "returned" && s.status !== "cancelled",
+    ),
+  );
+  const completed = assigned.filter((s) => s.status === "delivered" || s.status === "returned");
+  const next = active[0];
+  const upcoming = active.slice(1);
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
-              Today's Route #BLR-402
-            </h1>
-            <Badge variant="outline" className="text-[10px] font-mono">
-              {completedCount} of {stops.length} STOPS COMPLETED
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Optimized route sequence for EV Van KA-05-EV-2210 · Est Completion 1:30 PM.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 text-xs gap-1.5"
-            onClick={handleAIReorder}
-          >
-            <Sparkles className="h-3.5 w-3.5" /> Re-optimize Route
-          </Button>
-        </div>
+    <div className="space-y-5">
+      <div>
+        <h1 className="font-display text-xl font-semibold">My route</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Suggested order based on priority and delivery ETA · {active.length} stop
+          {active.length === 1 ? "" : "s"} left, {completed.length} done
+        </p>
       </div>
 
-      {/* Next Up Hero Card */}
-      {nextStop && (
-        <div className="border border-primary/30 rounded-xl p-5 bg-card space-y-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="h-7 w-7 rounded-full bg-foreground text-background grid place-items-center text-xs font-bold font-mono">
-                {nextStop.stopNum}
-              </span>
-              <div>
-                <span className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                  CURRENT DESTINATION
-                </span>
-                <div className="font-display font-bold text-lg text-foreground leading-tight">
-                  {nextStop.recipient}
-                </div>
-              </div>
-            </div>
+      {isLoading && (
+        <div className="text-sm text-muted-foreground py-8 text-center">Loading route…</div>
+      )}
 
-            <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 border-emerald-200">
-              ETA {nextStop.eta}
-            </Badge>
-          </div>
-
-          <div className="text-xs text-foreground bg-muted/30 p-3 rounded-lg flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-foreground shrink-0" />
-            <span className="font-medium">{nextStop.address}</span>
-          </div>
-
-          <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={() => handleCall(nextStop.recipient, nextStop.phone)}
-              >
-                <Phone className="h-3.5 w-3.5" /> Call Customer
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={() => handleStartNav(nextStop.address)}
-              >
-                <Navigation className="h-3.5 w-3.5" /> Start GPS Nav
-              </Button>
-            </div>
-
-            <Button
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => {
-                setActiveStop(nextStop);
-                setIsPodOpen(true);
-              }}
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" /> Complete POD (OTP)
-            </Button>
+      {!isLoading && !next && active.length === 0 && (
+        <div className="border rounded-xl bg-card p-6 text-center">
+          <PartyPopper className="h-6 w-6 mx-auto text-success" />
+          <div className="mt-2 text-sm font-medium">Route complete</div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            Every assigned stop has been resolved.
           </div>
         </div>
       )}
 
-      {/* Stop Sequence List */}
-      <div className="space-y-3">
-        <h2 className="font-display text-base font-semibold text-foreground">
-          Route Stop Sequence ({stops.length} Total)
-        </h2>
-
-        <div className="space-y-3">
-          {stops.map((s) => (
-            <div
-              key={s.id}
-              className={`border rounded-lg p-4 bg-card transition-all ${
-                s.status === "Completed"
-                  ? "opacity-60 bg-muted/20"
-                  : s.status === "Next Stop"
-                  ? "border-primary"
-                  : ""
-              }`}
-            >
-              <div className="flex items-start justify-between flex-wrap gap-2">
-                <div className="flex items-start gap-3">
-                  <span
-                    className={`h-7 w-7 rounded-full grid place-items-center text-xs font-bold font-mono shrink-0 ${
-                      s.status === "Completed"
-                        ? "bg-muted text-muted-foreground"
-                        : s.status === "Next Stop"
-                        ? "bg-foreground text-background"
-                        : "bg-muted text-foreground"
-                    }`}
-                  >
-                    {s.stopNum}
+      {next && (
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            Next stop
+          </div>
+          <div className="border-2 border-primary/40 rounded-xl bg-card p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-display font-semibold text-base truncate">
+                    {next.receiverName}
                   </span>
-
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm text-foreground">{s.recipient}</span>
-                      <span className="font-mono text-xs text-muted-foreground">{s.tracking}</span>
-                      {s.medical && (
-                        <Badge variant="outline" className="text-[9px] bg-red-50 text-red-600 border-red-200">
-                          Medical
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{s.address}</div>
-                  </div>
+                  <PriorityTag shipment={next} />
                 </div>
-
-                <div className="flex items-center gap-2">
-                  {s.cod > 0 && (
-                    <Badge variant="outline" className="text-xs font-mono">
-                      Collect ₹{s.cod} COD
-                    </Badge>
-                  )}
-                  <span className="text-xs font-medium text-muted-foreground">{s.eta}</span>
-
-                  {s.status !== "Completed" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                      onClick={() => {
-                        setActiveStop(s);
-                        setIsPodOpen(true);
-                      }}
-                    >
-                      Complete POD
-                    </Button>
-                  )}
-                </div>
+                <div className="text-sm text-muted-foreground mt-0.5">{fullAddress(next)}</div>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Complete POD Modal */}
-      <Dialog open={isPodOpen} onOpenChange={setIsPodOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Complete Proof of Delivery (POD)</DialogTitle>
-            <DialogDescription>
-              Verify OTP code provided by {activeStop?.recipient} to finalize delivery.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleCompletePodSubmit} className="space-y-4 py-2 text-xs">
-            <div className="border rounded-md p-3 bg-muted/20 space-y-1">
-              <div className="font-medium text-foreground text-sm">{activeStop?.recipient}</div>
-              <div className="text-muted-foreground text-xs">{activeStop?.address}</div>
-              <div className="font-mono text-xs text-muted-foreground mt-1">
-                Tracking ID: {activeStop?.tracking}
-              </div>
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              <span className="font-mono text-muted-foreground">{next.trackingId}</span>
+              <StatusTag status={next.status} />
+              <span className="text-muted-foreground">{formatEta(next)}</span>
             </div>
-
-            {activeStop && activeStop.cod > 0 && (
-              <div className="border border-amber-300 bg-amber-50 dark:bg-amber-950/40 p-3 rounded-md text-amber-800 dark:text-amber-200 font-medium">
-                Collect Cash on Delivery: ₹{activeStop.cod}
-              </div>
-            )}
-
-            <div className="space-y-1">
-              <Label className="text-xs flex items-center gap-1">
-                <KeyRound className="h-3.5 w-3.5" /> Enter 4-Digit Customer OTP
-              </Label>
-              <Input
-                type="text"
-                maxLength={4}
-                placeholder="e.g. 4210"
-                value={otpInput}
-                onChange={(e) => setOtpInput(e.target.value)}
-                required
-                className="h-10 text-center font-mono text-lg tracking-widest bg-background"
-                autoFocus
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <a
+                href={telHref(next.receiverPhone)}
+                className="inline-flex items-center justify-center gap-1.5 h-10 rounded-md border text-xs font-medium hover:bg-muted/50"
+              >
+                <Phone className="h-3.5 w-3.5" /> Call
+              </a>
+              <a
+                href={mapsHref(fullAddress(next))}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 h-10 rounded-md border text-xs font-medium hover:bg-muted/50"
+              >
+                <Navigation className="h-3.5 w-3.5" /> Navigate
+              </a>
             </div>
-
-            <DialogFooter className="pt-3">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsPodOpen(false)}>
-                Cancel
+            <Link to="/driver/shipment/$id" params={{ id: next.id }} className="block">
+              <Button className="w-full h-11 gap-1.5">
+                Open shipment <ChevronRight className="h-4 w-4" />
               </Button>
-              <Button type="submit" size="sm" disabled={submitting}>{submitting ? "Saving..." : "Verify OTP & Complete POD"}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {upcoming.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            Upcoming ({upcoming.length})
+          </div>
+          <div className="border rounded-lg bg-card divide-y overflow-hidden">
+            {upcoming.map((s, i) => (
+              <StopRow key={s.id} shipment={s} index={i + 2} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {completed.length > 0 && (
+        <div>
+          <button
+            onClick={() => setShowCompleted((v) => !v)}
+            className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2"
+          >
+            <ChevronDown
+              className={`h-3.5 w-3.5 transition-transform ${showCompleted ? "" : "-rotate-90"}`}
+            />
+            Completed ({completed.length})
+          </button>
+          {showCompleted && (
+            <div className="border rounded-lg bg-card divide-y overflow-hidden opacity-70">
+              {completed.map((s) => (
+                <StopRow key={s.id} shipment={s} done />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+function StopRow({
+  shipment: s,
+  index,
+  done,
+}: {
+  shipment: RealShipment;
+  index?: number;
+  done?: boolean;
+}) {
+  return (
+    <Link
+      to="/driver/shipment/$id"
+      params={{ id: s.id }}
+      className="flex items-center gap-3 px-3 py-3 hover:bg-muted/40 active:bg-muted/60"
+    >
+      {done ? (
+        <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
+      ) : (
+        <div className="h-6 w-6 shrink-0 rounded-full border grid place-items-center text-[11px] font-semibold text-muted-foreground">
+          {index}
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium truncate">{s.receiverName}</span>
+          <PriorityTag shipment={s} />
+        </div>
+        <div className="text-xs text-muted-foreground truncate">
+          {s.receiverAddressLine}, {s.receiverCity}
+        </div>
+        <div className="text-[11px] text-muted-foreground mt-1 font-mono">{s.trackingId}</div>
+      </div>
+      <div className="text-right shrink-0">
+        <StatusTag status={s.status} />
+      </div>
+    </Link>
   );
 }

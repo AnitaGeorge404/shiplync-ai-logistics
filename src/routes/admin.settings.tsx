@@ -6,14 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
-  Settings,
-  Sparkles,
+  Route as RouteIcon,
   ShieldCheck,
   Bell,
   Key,
   Save,
-  CheckCircle2,
-  Lock,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -21,7 +19,7 @@ export const Route = createFileRoute("/admin/settings")({
   head: () => ({
     meta: [
       { title: "Platform Settings — Admin Dashboard" },
-      { name: "description", content: "Configure AI dispatch thresholds, medical priority lanes, API integrations, and security settings." },
+      { name: "description", content: "Configure dispatch thresholds, medical priority lanes, API integrations, and security settings." },
     ],
   }),
   component: AdminSettingsPage,
@@ -42,37 +40,47 @@ function AdminSettingsPage() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success("Platform settings updated successfully");
+    toast.info("Noted locally — nothing here is wired to a backend yet, see the notice below.");
   };
 
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-5">
+      <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
-            Platform Settings
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Platform settings
           </h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Configure system parameters, AI dispatch engine, medical lane protocols, and API integration keys.
+            Configuration preview — dispatch automation, medical lane protocols, notification gateways and API access.
           </p>
         </div>
 
-        <Button size="sm" className="h-9 text-xs gap-1.5" onClick={handleSave}>
-          <Save className="h-3.5 w-3.5" /> Save Changes
+        <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={handleSave}>
+          <Save className="h-3.5 w-3.5" /> Save changes
         </Button>
       </div>
 
+      <div className="flex items-start gap-2.5 rounded-lg border border-info/30 bg-info/5 p-3.5 text-xs text-muted-foreground">
+        <Info className="h-4 w-4 text-info shrink-0 mt-0.5" />
+        <div>
+          <span className="font-medium text-foreground">This page is a configuration preview, not a live control panel.</span>{" "}
+          None of the toggles below are persisted or connected to a backend — there's no Twilio/WhatsApp integration or
+          settings table in this app yet. Values reset on reload. Everything else in the admin portal (shipments, hubs,
+          fleet, exceptions, users, payments) is real, database-backed data.
+        </div>
+      </div>
+
       <form onSubmit={handleSave} className="space-y-6">
-        {/* Section 1: AI Dispatch Engine */}
+        {/* Section 1: Dispatch automation */}
         <div className="border rounded-lg p-5 bg-card space-y-4">
-          <div className="flex items-center gap-2 font-display font-semibold text-base text-foreground border-b pb-3">
-            <Sparkles className="h-4 w-4 text-foreground" /> AI Dispatch Engine
+          <div className="flex items-center gap-2 font-semibold text-sm text-foreground border-b pb-3">
+            <RouteIcon className="h-4 w-4" /> Dispatch automation
           </div>
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-xs font-medium">Autonomous Route Optimization</Label>
+              <Label className="text-xs font-medium">Automatic route optimization</Label>
               <p className="text-[11px] text-muted-foreground">
                 Automatically cluster parcel stops and reassign riders when congestion is detected.
               </p>
@@ -82,7 +90,7 @@ function AdminSettingsPage() {
 
           <div className="grid grid-cols-2 gap-4 pt-2">
             <div className="space-y-1">
-              <Label className="text-xs">Predictive Delay Threshold (minutes)</Label>
+              <Label className="text-xs">Predictive delay threshold (minutes)</Label>
               <Input
                 type="number"
                 value={delayThreshold}
@@ -92,7 +100,7 @@ function AdminSettingsPage() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Max Deliveries per Rider Shift</Label>
+              <Label className="text-xs">Max deliveries per rider shift</Label>
               <Input
                 type="number"
                 value={maxStops}
@@ -103,15 +111,15 @@ function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* Section 2: Medical Priority Protocols */}
+        {/* Section 2: Medical priority protocols */}
         <div className="border rounded-lg p-5 bg-card space-y-4">
-          <div className="flex items-center gap-2 font-display font-semibold text-base text-foreground border-b pb-3">
-            <ShieldCheck className="h-4 w-4 text-foreground" /> Medical Priority Protocols
+          <div className="flex items-center gap-2 font-semibold text-sm text-foreground border-b pb-3">
+            <ShieldCheck className="h-4 w-4" /> Medical priority protocols
           </div>
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-xs font-medium">Emergency Override Lane</Label>
+              <Label className="text-xs font-medium">Emergency override lane</Label>
               <p className="text-[11px] text-muted-foreground">
                 Lock priority queue status for cold-chain vaccines and critical medical supplies.
               </p>
@@ -121,7 +129,7 @@ function AdminSettingsPage() {
 
           <div className="flex items-center justify-between pt-2">
             <div className="space-y-0.5">
-              <Label className="text-xs font-medium">Chain-of-Custody Photo Verification</Label>
+              <Label className="text-xs font-medium">Chain-of-custody photo verification</Label>
               <p className="text-[11px] text-muted-foreground">
                 Require driver photo and recipient signature confirmation before completing medical drop-off.
               </p>
@@ -130,15 +138,15 @@ function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* Section 3: Notification Integrations */}
+        {/* Section 3: Notification gateways */}
         <div className="border rounded-lg p-5 bg-card space-y-4">
-          <div className="flex items-center gap-2 font-display font-semibold text-base text-foreground border-b pb-3">
-            <Bell className="h-4 w-4 text-foreground" /> Notification Gateways
+          <div className="flex items-center gap-2 font-semibold text-sm text-foreground border-b pb-3">
+            <Bell className="h-4 w-4" /> Notification gateways
           </div>
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-xs font-medium">SMS Customer Alerts (Twilio)</Label>
+              <Label className="text-xs font-medium">SMS customer alerts (Twilio)</Label>
               <p className="text-[11px] text-muted-foreground">
                 Dispatch automated SMS tracking links when package status changes.
               </p>
@@ -157,14 +165,14 @@ function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* Section 4: Security & API Keys */}
+        {/* Section 4: Security & API access */}
         <div className="border rounded-lg p-5 bg-card space-y-4">
-          <div className="flex items-center gap-2 font-display font-semibold text-base text-foreground border-b pb-3">
-            <Key className="h-4 w-4 text-foreground" /> Security & API Access
+          <div className="flex items-center gap-2 font-semibold text-sm text-foreground border-b pb-3">
+            <Key className="h-4 w-4" /> Security & API access
           </div>
 
           <div className="space-y-1">
-            <Label className="text-xs">Live Environment API Key</Label>
+            <Label className="text-xs">Example API key (placeholder — no live environment issues real keys yet)</Label>
             <div className="flex gap-2">
               <Input
                 type="password"

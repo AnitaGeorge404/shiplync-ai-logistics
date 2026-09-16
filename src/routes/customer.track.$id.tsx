@@ -1,44 +1,20 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { RouteMap } from "@/components/shiplync/RouteMap";
+import { ShipmentMilestones } from "@/components/shiplync/ShipmentMilestones";
 import { Timeline } from "@/components/shiplync/Timeline";
 import { Barcode } from "@/components/shiplync/Barcode";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, Camera, Sparkles, ArrowLeft, Share2 } from "lucide-react";
+import { toBadgeStatus, toProgress } from "@/lib/api-hooks";
+import { ShieldCheck, Camera, ArrowLeft, Share2, AlertTriangle, RotateCcw, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
-
-const STATUS_PROGRESS: Record<string, number> = {
-  booked: 5,
-  payment_completed: 10,
-  picked_up: 25,
-  arrived_hub: 40,
-  in_transit: 60,
-  out_for_delivery: 85,
-  delivery_attempted: 90,
-  delivered: 100,
-  returned: 100,
-  cancelled: 0,
-};
-
-const STATUS_BADGE_MAP: Record<string, string> = {
-  booked: "booked",
-  payment_completed: "booked",
-  picked_up: "picked_up",
-  arrived_hub: "at_hub",
-  in_transit: "in_transit",
-  out_for_delivery: "out_for_delivery",
-  delivery_attempted: "exception",
-  delivered: "delivered",
-  returned: "exception",
-  cancelled: "exception",
-};
 
 export const Route = createFileRoute("/customer/track/$id")({
   loader: async ({ params }) => {
     if (typeof window === "undefined") return null; // resolved client-side; see below
     const res = await fetch(`/api/shipments/track/${encodeURIComponent(params.id)}`);
     if (!res.ok) throw notFound();
-    return res.json() as Promise<{ shipment: any; events: any[]; currentHubName: string | null }>;
+    return res.json() as Promise<{ shipment: any; events: any[]; currentHubName: string | null; attempts: any[]; exceptions: any[] }>;
   },
   head: ({ loaderData }) => ({
     meta: [
@@ -65,8 +41,10 @@ function TrackShipment() {
     note: e.note,
     done: true,
   }));
-  const progress = STATUS_PROGRESS[s.status] ?? 0;
+  const progress = toProgress(s.status);
   const nextEvent = data.events[data.events.length - 1]?.status ?? "booked";
+  const attempts = data.attempts ?? [];
+  const exceptions = data.exceptions ?? [];
 
   return (
     <div className="space-y-6">
@@ -74,15 +52,19 @@ function TrackShipment() {
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <div className="text-xs font-mono text-muted-foreground">{s.trackingId}</div>
-          <h1 className="font-display text-3xl font-semibold mt-1">{s.senderCity} → {s.receiverCity}</h1>
+          <h1 className="font-display text-2xl sm:text-3xl font-semibold mt-1">{s.senderCity} → {s.receiverCity}</h1>
           <div className="mt-2 flex items-center gap-2 flex-wrap">
-            <StatusBadge status={STATUS_BADGE_MAP[s.status] as any} />
+            <StatusBadge status={toBadgeStatus(s.status)} />
             {s.packageType === "medical" && <span className="inline-flex items-center gap-1 rounded-full bg-medical/10 text-medical border border-medical/20 text-[11px] font-medium px-2.5 py-0.5">
               <ShieldCheck className="h-3 w-3" /> Medical priority</span>}
             <span className="text-xs text-muted-foreground capitalize">{s.packageType} · {s.weightKg} kg</span>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="text-right">
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Estimated delivery</div>
+            <div className="text-sm font-medium">{s.estimatedDeliveryAt ? new Date(s.estimatedDeliveryAt).toLocaleString() : "TBD"}</div>
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -97,31 +79,71 @@ function TrackShipment() {
         </div>
       </div>
 
-      <div className="card-elevated p-4 flex items-center justify-between flex-wrap gap-3">
-        <div className="text-xs text-muted-foreground">Shipping label barcode — scanned at hub intake (REQ-5.3)</div>
-        <Barcode value={s.trackingId} height={48} />
+      <div className="card-elevated p-5 sm:p-6">
+        <ShipmentMilestones status={s.status} events={data.events} />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <RouteMap from={s.senderCity} to={s.receiverCity} progress={progress} className="h-96" />
+          <RouteMap from={s.senderCity} to={s.receiverCity} progress={progress} className="h-72 sm:h-96" />
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Fact k="ETA" v={s.estimatedDeliveryAt ? new Date(s.estimatedDeliveryAt).toLocaleString() : "TBD"} />
-            <Fact k="Priority" v={s.priority} />
             <Fact k="Current location" v={data.currentHubName ? `${data.currentHubName}` : nextEvent.replace(/_/g, " ")} />
+            <Fact k="Priority" v={s.priority} />
             <Fact k="Distance" v={s.distanceKm ? `${Math.round(s.distanceKm)} km` : "—"} />
+            <Fact k="Package" v={`${s.packageType} · ${s.weightKg} kg`} />
           </div>
 
           <div className="card-elevated p-5">
             <div className="flex items-center justify-between mb-4">
-              <div className="font-display font-semibold">Delivery timeline</div>
+              <div className="font-display font-semibold">Activity log</div>
               <div className="text-xs text-muted-foreground">{events.length} recorded events</div>
             </div>
             {events.length > 0 ? <Timeline events={events} /> : (
               <div className="text-xs text-muted-foreground py-4 text-center">No events recorded yet.</div>
             )}
           </div>
+
+          {exceptions.length > 0 && (
+            <div className="card-elevated p-5">
+              <div className="flex items-center gap-2 font-display font-semibold text-destructive">
+                <AlertTriangle className="h-4 w-4" /> Exceptions
+              </div>
+              <div className="mt-3 space-y-2">
+                {exceptions.map((ex: any) => (
+                  <div key={ex.id} className="rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-medium capitalize">{ex.type.replace(/_/g, " ")}</span>
+                      <span className="text-[10px] text-muted-foreground shrink-0">
+                        {ex.resolved ? "Resolved" : "Open"} · {new Date(ex.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">{ex.message}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {attempts.length > 0 && (
+            <div className="card-elevated p-5">
+              <div className="font-display font-semibold">Delivery attempts</div>
+              <div className="mt-3 space-y-2">
+                {attempts.map((a: any) => (
+                  <div key={a.id} className="flex items-start gap-3 rounded-lg border p-3">
+                    <div className={`h-7 w-7 rounded-full grid place-items-center shrink-0 ${a.outcome === "delivered" ? "bg-success/15 text-success" : "bg-warning/15 text-warning-foreground"}`}>
+                      {a.outcome === "delivered" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-medium">Attempt #{a.attemptNumber} · <span className="capitalize">{a.outcome.replace(/_/g, " ")}</span></div>
+                      {a.reason && <div className="text-xs text-muted-foreground mt-0.5">{a.reason}</div>}
+                      <div className="text-[10px] text-muted-foreground mt-1">{new Date(a.createdAt).toLocaleString()}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -143,7 +165,7 @@ function TrackShipment() {
           {s.priority !== "normal" && (
             <div className="card-elevated p-5 bg-muted/40">
               <div className="flex items-center gap-2 text-xs font-medium text-primary">
-                <Sparkles className="h-3.5 w-3.5" /> Priority handling
+                <ShieldCheck className="h-3.5 w-3.5" /> Priority handling
               </div>
               <div className="mt-3 text-xs text-muted-foreground">
                 This shipment is flagged <strong className="text-foreground capitalize">{s.priority}</strong> priority
@@ -159,6 +181,22 @@ function TrackShipment() {
               {s.status === "delivered" ? "Delivered — OTP verified at drop-off." : "Will appear here once delivered."}
             </div>
           </div>
+
+          <div className="card-elevated p-4 flex items-center justify-between flex-wrap gap-3">
+            <div className="text-xs text-muted-foreground">Shipping label barcode</div>
+            <Barcode value={s.trackingId} height={40} />
+          </div>
+
+          {s.status === "returned" && (
+            <div className="card-elevated p-5 bg-muted/40">
+              <div className="flex items-center gap-2 text-xs font-medium text-foreground">
+                <RotateCcw className="h-3.5 w-3.5" /> Returned to sender
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Delivery couldn't be completed and this shipment has been sent back. See the Returns page for details.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

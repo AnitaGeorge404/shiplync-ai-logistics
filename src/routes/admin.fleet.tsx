@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { useVehicles, useHubs, useQueryClient } from "@/lib/api-hooks";
+import { useVehicles, useHubs, useShipments, useQueryClient } from "@/lib/api-hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
@@ -57,9 +58,12 @@ export const Route = createFileRoute("/admin/fleet")({
 
 const VEHICLE_TYPES = ["bike", "van", "truck", "ev_bike", "ev_van"] as const;
 
+const ACTIVE_STATUSES = ["picked_up", "arrived_hub", "in_transit", "out_for_delivery"];
+
 function AdminFleetPage() {
   const { data: fleetList = [] } = useVehicles();
   const { data: hubsList = [] } = useHubs();
+  const { data: shipments = [] } = useShipments("all");
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [isAddVehicleOpen, setIsAddVehicleOpen] = useState(false);
@@ -69,13 +73,23 @@ function AdminFleetPage() {
   const [newHubId, setNewHubId] = useState("");
   const [newCapacity, setNewCapacity] = useState("250");
 
+  const fleetWithUtilization = useMemo(() => {
+    return fleetList.map((v: any) => {
+      const loadedKg = shipments
+        .filter((s: any) => s.assignedVehicleId === v.id && ACTIVE_STATUSES.includes(s.status))
+        .reduce((acc: number, s: any) => acc + s.weightKg, 0);
+      const utilizationPct = v.capacityKg > 0 ? Math.min(100, Math.round((loadedKg / v.capacityKg) * 100)) : 0;
+      return { ...v, loadedKg, utilizationPct };
+    });
+  }, [fleetList, shipments]);
+
   const filteredFleet = useMemo(() => {
-    return fleetList.filter(
+    return fleetWithUtilization.filter(
       (v: any) =>
         v.registrationNumber.toLowerCase().includes(search.toLowerCase()) ||
         v.type.toLowerCase().includes(search.toLowerCase()),
     );
-  }, [fleetList, search]);
+  }, [fleetWithUtilization, search]);
 
   const stats = useMemo(() => {
     const total = fleetList.length;
@@ -115,13 +129,13 @@ function AdminFleetPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-5">
+      <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight">
             Vehicle Fleet
           </h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Monitor active vehicles, EV charging levels, telemetry, and driver assignments.
+            Real fleet registry, load utilization and hub assignments — from the live database.
           </p>
         </div>
 
@@ -148,29 +162,29 @@ function AdminFleetPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Total Fleet <Truck className="h-4 w-4 text-foreground" />
+            Total Fleet <Truck className="h-4 w-4" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats.total}</div>
+          <div className="text-2xl font-semibold mt-2">{stats.total}</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Active <CheckCircle2 className="h-4 w-4 text-foreground" />
+            Active <CheckCircle2 className="h-4 w-4" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">{stats.active}</div>
+          <div className="text-2xl font-semibold mt-2">{stats.active}</div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            EV Fleet <Zap className="h-4 w-4 text-foreground" />
+            EV Fleet <Zap className="h-4 w-4" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">
+          <div className="text-2xl font-semibold mt-2">
             {stats.evCount} ({Math.round((stats.evCount / (stats.total || 1)) * 100)}%)
           </div>
         </div>
         <div className="border rounded-lg p-4 bg-card">
           <div className="text-xs text-muted-foreground font-medium flex items-center justify-between">
-            Hubs Covered <Wrench className="h-4 w-4 text-foreground" />
+            Hubs Covered <Wrench className="h-4 w-4" />
           </div>
-          <div className="text-2xl font-semibold font-display mt-2">{hubsList.length}</div>
+          <div className="text-2xl font-semibold mt-2">{hubsList.length}</div>
         </div>
       </div>
 
@@ -188,14 +202,15 @@ function AdminFleetPage() {
       </div>
 
       {/* Fleet Table */}
-      <div className="border rounded-lg bg-card overflow-hidden shadow-sm">
+      <div className="border rounded-lg bg-card overflow-hidden">
         <Table>
-          <TableHeader className="bg-muted/40">
+          <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent">
               <TableHead className="text-xs font-medium">Registration</TableHead>
               <TableHead className="text-xs font-medium">Vehicle Type</TableHead>
               <TableHead className="text-xs font-medium">Hub</TableHead>
               <TableHead className="text-xs font-medium">Capacity</TableHead>
+              <TableHead className="text-xs font-medium w-40">Utilization</TableHead>
               <TableHead className="text-xs font-medium">Electric</TableHead>
               <TableHead className="text-xs font-medium">Status</TableHead>
             </TableRow>
@@ -203,13 +218,13 @@ function AdminFleetPage() {
           <TableBody>
             {filteredFleet.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-8">
+                <TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-8">
                   No vehicles registered yet.
                 </TableCell>
               </TableRow>
             )}
             {filteredFleet.map((v: any) => (
-              <TableRow key={v.id} className="text-xs hover:bg-muted/30">
+              <TableRow key={v.id} className="text-xs hover:bg-muted/20">
                 <TableCell className="py-3">
                   <div className="font-mono font-semibold text-foreground text-xs">
                     {v.registrationNumber}
@@ -233,11 +248,18 @@ function AdminFleetPage() {
                   </div>
                 </TableCell>
 
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Progress value={v.utilizationPct} className="h-1.5 flex-1" />
+                    <span className="font-mono text-[11px] w-9 text-right text-muted-foreground">{v.utilizationPct}%</span>
+                  </div>
+                </TableCell>
+
                 <TableCell className="text-xs">{v.isElectric ? "Yes" : "No"}</TableCell>
 
                 <TableCell>
                   <div className="flex items-center gap-1.5">
-                    <span className={`h-2 w-2 rounded-full ${v.active ? "bg-emerald-500" : "bg-muted-foreground"}`} />
+                    <span className={`h-2 w-2 rounded-full ${v.active ? "bg-success" : "bg-muted-foreground"}`} />
                     <span className="font-medium text-xs">{v.active ? "Active" : "Inactive"}</span>
                   </div>
                 </TableCell>

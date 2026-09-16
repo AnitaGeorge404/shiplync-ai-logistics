@@ -8,6 +8,7 @@ export interface UserProfile {
   phone: string;
   avatar?: string;
   role?: string;
+  hubId?: string;
   accountType: "individual" | "business";
 }
 
@@ -50,6 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         phone: (session.user as any).phone ?? "",
         avatar: session.user.image ?? undefined,
         role: (session.user as any).role ?? "customer",
+        hubId: (session.user as any).hubId ?? undefined,
         accountType: "individual",
       }
     : null;

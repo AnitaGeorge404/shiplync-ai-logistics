@@ -46,7 +46,7 @@ function PaymentsPage() {
           <div className="text-xs uppercase tracking-widest text-muted-foreground">Payments</div>
           <h1 className="font-display text-3xl font-semibold mt-1">Sign in to view payments</h1>
         </div>
-        <div className="card-elevated p-6 sm:p-8 bg-background border rounded-2xl shadow-xl">
+        <div className="card-elevated p-6 sm:p-8">
           <LoginForm compact />
         </div>
       </div>
@@ -88,45 +88,68 @@ function PaymentsPage() {
           </div>
         </div>
       ) : (
-        <div className="card-elevated overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="text-left px-5 py-3">Transaction</th>
-                <th className="text-left px-5 py-3">Shipment</th>
-                <th className="text-left px-5 py-3">Date</th>
-                <th className="text-left px-5 py-3">Method</th>
-                <th className="text-right px-5 py-3">Amount</th>
-                <th className="text-right px-5 py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {payments.map((p) => (
-                <tr key={p.id} className="hover:bg-muted/30">
-                  <td className="px-5 py-4 font-mono text-xs">{p.transactionRef}</td>
-                  <td className="px-5 py-4">
-                    <Link
-                      to="/customer/track/$id"
-                      params={{ id: p.trackingId }}
-                      className="font-mono text-xs text-primary hover:underline"
-                    >
-                      {p.trackingId}
-                    </Link>
-                    <div className="text-xs text-muted-foreground">
-                      {p.senderCity} → {p.receiverCity}
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 text-xs text-muted-foreground">
-                    {new Date(p.createdAt).toLocaleString()}
-                  </td>
-                  <td className="px-5 py-4 text-xs capitalize">{p.method}</td>
-                  <td className="px-5 py-4 text-right font-medium">₹{p.amount.toFixed(2)}</td>
-                  <td className="px-5 py-4 text-right text-xs capitalize">{p.status}</td>
+        <>
+          <div className="card-elevated overflow-hidden hidden md:block">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="text-left px-5 py-3">Transaction</th>
+                  <th className="text-left px-5 py-3">Shipment</th>
+                  <th className="text-left px-5 py-3">Date</th>
+                  <th className="text-left px-5 py-3">Method</th>
+                  <th className="text-right px-5 py-3">Amount</th>
+                  <th className="text-right px-5 py-3">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y">
+                {payments.map((p) => (
+                  <tr key={p.id} className="hover:bg-muted/30">
+                    <td className="px-5 py-4 font-mono text-xs">{p.transactionRef}</td>
+                    <td className="px-5 py-4">
+                      <Link
+                        to="/customer/track/$id"
+                        params={{ id: p.trackingId }}
+                        className="font-mono text-xs text-primary hover:underline"
+                      >
+                        {p.trackingId}
+                      </Link>
+                      <div className="text-xs text-muted-foreground">
+                        {p.senderCity} → {p.receiverCity}
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 text-xs text-muted-foreground">
+                      {new Date(p.createdAt).toLocaleString()}
+                    </td>
+                    <td className="px-5 py-4 text-xs capitalize">{p.method}</td>
+                    <td className="px-5 py-4 text-right font-medium">₹{p.amount.toFixed(2)}</td>
+                    <td className="px-5 py-4 text-right text-xs capitalize">{p.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="space-y-3 md:hidden">
+            {payments.map((p) => (
+              <div key={p.id} className="card-elevated p-4 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs">{p.transactionRef}</span>
+                  <span className="font-medium">₹{p.amount.toFixed(2)}</span>
+                </div>
+                <Link to="/customer/track/$id" params={{ id: p.trackingId }} className="font-mono text-xs text-primary hover:underline block">
+                  {p.trackingId}
+                </Link>
+                <div className="text-xs text-muted-foreground">
+                  {p.senderCity} → {p.receiverCity} · {new Date(p.createdAt).toLocaleDateString()}
+                </div>
+                <div className="text-xs capitalize flex items-center justify-between">
+                  <span className="text-muted-foreground">{p.method}</span>
+                  <span>{p.status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
