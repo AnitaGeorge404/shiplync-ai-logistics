@@ -193,6 +193,44 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     }
 
     // ---------------------------------------------------------------
+    // GET /api/pincode/:pincode — Public Indian postal lookup proxy
+    // ---------------------------------------------------------------
+    if (parts[1] === "pincode" && parts.length === 3 && request.method === "GET") {
+      const pin = parts[2].trim().replace(/\D/g, "");
+      if (pin.length !== 6 || !/^[1-9]\d{5}$/.test(pin)) {
+        return json({ error: "Invalid 6-digit Indian PIN code" }, 400);
+      }
+      try {
+        const response = await fetch(`https://api.postalpincode.in/pincode/${pin}`, {
+          headers: { "user-agent": "ShipLync-Logistics" },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data) && data[0]?.Status === "Success" && Array.isArray(data[0]?.PostOffice)) {
+            const postOffices = data[0].PostOffice;
+            const first = postOffices[0];
+            const rawDistrict = (first.District || "").trim();
+            const rawBlock = (first.Block || "").trim();
+            const rawName = (first.Name || "").trim();
+            const state = (first.State || "").trim();
+            const district = rawDistrict;
+            const city = district && district !== "NA" ? district : rawBlock && rawBlock !== "NA" ? rawBlock : rawName;
+            const places = Array.from(new Set(postOffices.map((po: any) => (po.Name || "").trim()))).filter(Boolean);
+            return json({
+              city,
+              state,
+              district,
+              places,
+            });
+          }
+        }
+        return json({ error: "PIN code not found" }, 404);
+      } catch (err: any) {
+        return json({ error: "Failed to fetch PIN code details" }, 500);
+      }
+    }
+
+    // ---------------------------------------------------------------
     // /api/shipments
     // ---------------------------------------------------------------
     if (parts[1] === "shipments" && parts.length === 2 && request.method === "POST") {
@@ -216,8 +254,18 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       // origin/destination and package type genuinely change the estimate,
       // not a fixed bucket per priority.
       const distanceKm = calculateDistance(
-        { city: input.senderCity, state: input.senderState },
-        { city: input.receiverCity, state: input.receiverState },
+        {
+          city: input.senderCity,
+          state: input.senderState,
+          pincode: input.senderPincode,
+          addressLine: input.senderAddressLine,
+        },
+        {
+          city: input.receiverCity,
+          state: input.receiverState,
+          pincode: input.receiverPincode,
+          addressLine: input.receiverAddressLine,
+        },
       );
       const etaHours = estimateDeliveryHours({
         priority,

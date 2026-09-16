@@ -6,14 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, MapPin, Package, CreditCard, Lightbulb, ShieldCheck, Zap, Leaf, ArrowRight, Copy, Route as RouteIcon } from "lucide-react";
+import { Check, MapPin, Package, CreditCard, Lightbulb, ShieldCheck, Zap, Leaf, ArrowRight, Copy, Route as RouteIcon, Loader2, CheckCircle2, Sparkles } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { calculateShipmentCost, estimateDeliveryHours } from "@/lib/pricing";
-import { calculateDistance } from "@/lib/distance";
+import { calculateDistance, getRouteDistanceDetails } from "@/lib/distance";
 import { getShipmentRecommendations } from "@/lib/recommendations";
 import { partySchema, packageSchema, validateToFieldErrors } from "@/lib/validation";
 import { useAddresses } from "@/lib/api-hooks";
+import { lookupPincode } from "@/lib/pincode";
 
 export const Route = createFileRoute("/customer/book")({
   head: () => ({
@@ -84,13 +85,45 @@ function BookShipment() {
 
   // Real distance + ETA — same functions the server uses at booking time,
   // recalculated live as the sender/receiver/package fields change.
-  const distanceKm = useMemo(() => {
-    if (!sender.city || !receiver.city) return 0;
-    return calculateDistance(
-      { city: sender.city, state: sender.state },
-      { city: receiver.city, state: receiver.state },
+  const routeDetails = useMemo(() => {
+    if (!sender.city || !receiver.city) {
+      return {
+        distanceKm: 0,
+        directDistanceKm: 0,
+        routingOverheadKm: 0,
+        routingOverheadPct: 0,
+        isLocal: false,
+      };
+    }
+    return getRouteDistanceDetails(
+      {
+        city: sender.city,
+        state: sender.state,
+        pincode: sender.pincode,
+        addressLine: sender.addressLine,
+      },
+      {
+        city: receiver.city,
+        state: receiver.state,
+        pincode: receiver.pincode,
+        addressLine: receiver.addressLine,
+      },
     );
-  }, [sender.city, sender.state, receiver.city, receiver.state]);
+  }, [
+    sender.city,
+    sender.state,
+    sender.pincode,
+    sender.addressLine,
+    receiver.city,
+    receiver.state,
+    receiver.pincode,
+    receiver.addressLine,
+  ]);
+
+  const distanceKm = routeDetails.distanceKm;
+  const directDistanceKm = routeDetails.directDistanceKm;
+  const routeSavingsKm = routeDetails.routingOverheadKm;
+  const routeSavingsPct = routeDetails.routingOverheadPct;
 
   const floorCountNum = Math.max(parseInt(floorCount, 10) || 0, 0);
   const etaHours = estimateDeliveryHours({
@@ -102,13 +135,11 @@ function BookShipment() {
   });
   const etaDays = Math.round((etaHours / 24) * 10) / 10;
 
-  // "Route optimization" — a real, transparent calculation (not a fake AI
-  // number): straight-line distance vs. the road-network estimate actually
-  // used for the ETA, so the "savings" shown are honest and change with
-  // the real route.
-  const directDistanceKm = distanceKm / 1.25; // undo the road-inflation factor from distance.ts
-  const routeSavingsKm = Math.max(0, distanceKm - directDistanceKm);
-  const routeSavingsPct = distanceKm > 0 ? Math.round((routeSavingsKm / distanceKm) * 100) : 0;
+  const formatKm = (km: number) => {
+    if (km <= 0) return "0 Km";
+    if (km < 10) return `${km.toFixed(1)} Km`;
+    return `${Math.round(km)} Km`;
+  };
 
   const recommendations = useMemo(
     () =>
@@ -375,24 +406,35 @@ function BookShipment() {
               </div>
               <div className="grid sm:grid-cols-2 gap-3 text-sm">
                 <Line l="Route" v={`${sender.city} → ${receiver.city}`} />
-                <Line l="Distance (est.)" v={`${Math.round(distanceKm)} km`} />
+                <Line l="Distance (est.)" v={formatKm(distanceKm)} />
                 <Line l="Package type" v={pkg} />
                 <Line l="Weight" v={`${weightNum} kg`} />
                 <Line l="Dimensions" v={`${lengthNum} × ${widthNum} × ${heightNum} cm`} />
                 <Line l="Insurance" v={insurance ? "Included" : "Not selected"} />
-                <Line l="Estimated delivery" v={etaDays >= 1 ? `~${etaDays} day${etaDays === 1 ? "" : "s"}` : `~${etaHours}h`} pos />
+                <Line
+                  l="Estimated delivery"
+                  v={
+                    etaHours <= 12
+                      ? `~${etaHours}h (Same day)`
+                      : etaDays >= 1
+                      ? `~${etaDays} day${etaDays === 1 ? "" : "s"}`
+                      : `~${etaHours}h`
+                  }
+                  pos
+                />
               </div>
 
               <div className="rounded-xl border p-5">
                 <div className="flex items-center gap-2 text-sm font-medium"><RouteIcon className="h-4 w-4 text-primary" /> Route optimization</div>
                 <div className="mt-3 grid sm:grid-cols-3 gap-3 text-xs">
-                  <Line l="Direct distance" v={`${Math.round(directDistanceKm)} km`} muted />
-                  <Line l="Road-network route" v={`${Math.round(distanceKm)} km`} muted />
-                  <Line l="Routing overhead" v={`+${Math.round(routeSavingsKm)} km (${routeSavingsPct}%)`} muted />
+                  <Line l="Direct distance" v={formatKm(directDistanceKm)} muted />
+                  <Line l="Road-network route" v={formatKm(distanceKm)} muted />
+                  <Line l="Routing overhead" v={`+${formatKm(routeSavingsKm)} (${routeSavingsPct}%)`} muted />
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-3">
-                  Calculated from real origin/destination coordinates, not a placeholder figure — the road-network estimate
-                  above (used for your delivery ETA) always includes realistic routing overhead over the straight-line distance.
+                  {routeDetails.isLocal
+                    ? "Hyper-local / intra-city route calculated with neighborhood road navigation and direct door-to-door dispatch."
+                    : "Calculated from real origin/destination coordinates, not a placeholder figure — the road-network estimate above (used for your delivery ETA) always includes realistic routing overhead over the straight-line distance."}
                 </p>
               </div>
             </div>
@@ -507,8 +549,56 @@ function PartyForm({
   savedAddresses: any[];
   onSelectSaved: (id: string) => void;
 }) {
+  const [isLookingUpPincode, setIsLookingUpPincode] = useState(false);
+  const [pincodeFeedback, setPincodeFeedback] = useState<{
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
+  const [localities, setLocalities] = useState<string[]>([]);
+
   function set<K extends keyof Party>(key: K, v: string) {
     onChange({ ...value, [key]: v });
+  }
+
+  async function handlePincodeChange(raw: string) {
+    const formatted = raw.replace(/\D/g, "").slice(0, 6);
+    const updated = { ...value, pincode: formatted };
+
+    if (formatted.length === 6 && /^[1-9]\d{5}$/.test(formatted)) {
+      setIsLookingUpPincode(true);
+      setPincodeFeedback(null);
+      try {
+        const result = await lookupPincode(formatted);
+        if (result && result.city && result.state) {
+          updated.city = result.city;
+          updated.state = result.state;
+          setPincodeFeedback({
+            type: "success",
+            message: `Auto-filled: ${result.city}, ${result.state}`,
+          });
+          if (result.places && result.places.length > 1) {
+            setLocalities(result.places.slice(0, 8));
+          } else {
+            setLocalities([]);
+          }
+        } else {
+          setPincodeFeedback({
+            type: "info",
+            message: "PIN code not found in postal directory. Please enter city & state manually.",
+          });
+          setLocalities([]);
+        }
+      } catch {
+        setPincodeFeedback(null);
+      } finally {
+        setIsLookingUpPincode(false);
+      }
+    } else {
+      setPincodeFeedback(null);
+      setLocalities([]);
+    }
+
+    onChange(updated);
   }
 
   return (
@@ -536,8 +626,71 @@ function PartyForm({
         </div>
         <Field label="City" value={value.city} onChange={(v) => set("city", v)} error={errors.city} />
         <Field label="State" value={value.state} onChange={(v) => set("state", v)} error={errors.state} />
-        <Field label="PIN code" value={value.pincode} onChange={(v) => set("pincode", v)} error={errors.pincode} placeholder="400002" />
+        <Field
+          label="PIN code"
+          value={value.pincode}
+          onChange={handlePincodeChange}
+          error={errors.pincode}
+          placeholder="400002"
+          maxLength={6}
+          rightElement={
+            isLookingUpPincode ? (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            ) : pincodeFeedback?.type === "success" ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            ) : null
+          }
+          helperText={
+            pincodeFeedback ? (
+              <div
+                className={`text-[11px] mt-1 flex items-center gap-1 ${
+                  pincodeFeedback.type === "success"
+                    ? "text-emerald-600 font-medium"
+                    : pincodeFeedback.type === "error"
+                    ? "text-destructive"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {pincodeFeedback.type === "success" && <Sparkles className="h-3 w-3 shrink-0" />}
+                <span>{pincodeFeedback.message}</span>
+              </div>
+            ) : isLookingUpPincode ? (
+              <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                <span>Fetching City & State from postal directory...</span>
+              </div>
+            ) : (
+              <span className="text-[10px] text-muted-foreground mt-1 block">
+                Enter 6-digit PIN to auto-fetch City & State
+              </span>
+            )
+          }
+        />
       </div>
+
+      {localities.length > 0 && (
+        <div className="mt-3 text-xs bg-muted/40 rounded-lg p-2.5 border space-y-1.5 animate-in fade-in-50 duration-200">
+          <span className="text-[11px] text-muted-foreground font-medium">
+            Localities under PIN {value.pincode} (click to set City):
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {localities.map((place) => (
+              <button
+                key={place}
+                type="button"
+                onClick={() => set("city", place)}
+                className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-all ${
+                  value.city.toLowerCase() === place.toLowerCase()
+                    ? "bg-primary text-primary-foreground border-primary font-medium"
+                    : "bg-background hover:bg-muted text-foreground"
+                }`}
+              >
+                {place}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -549,6 +702,9 @@ function Field({
   error,
   type = "text",
   placeholder,
+  rightElement,
+  helperText,
+  maxLength,
 }: {
   label: string;
   value: string;
@@ -556,18 +712,30 @@ function Field({
   error?: string;
   type?: string;
   placeholder?: string;
+  rightElement?: React.ReactNode;
+  helperText?: React.ReactNode;
+  maxLength?: number;
 }) {
   return (
     <div>
-      <Label>{label}</Label>
-      <Input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={error ? "border-destructive focus-visible:ring-destructive" : ""}
-      />
+      <Label className="text-xs">{label}</Label>
+      <div className="relative mt-1">
+        <Input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          maxLength={maxLength}
+          className={`${error ? "border-destructive focus-visible:ring-destructive" : ""} ${rightElement ? "pr-9" : ""}`}
+        />
+        {rightElement && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+            {rightElement}
+          </div>
+        )}
+      </div>
       {error && <div className="text-[11px] text-destructive mt-1">{error}</div>}
+      {helperText}
     </div>
   );
 }

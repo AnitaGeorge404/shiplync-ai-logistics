@@ -73,7 +73,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     setIsLoading(true);
     setTimeout(() => {
       setIsLoading(false);
-      login({ phone: `+91 ${phone}` });
+      login({
+        email: "customer1@shiplync.test",
+        phone: `+91 ${phone}`,
+        name: "Demo Customer",
+      });
       if (onSuccess) onSuccess();
     }, 700);
   };
@@ -94,12 +98,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     if (onSuccess) onSuccess();
   };
 
-  // Seeded per-role demo accounts (scripts/seed.mjs) — the only way to
-  // reach the Delivery Partner / Hub Operations / Administrator portals
-  // without knowing their real credentials in advance. Uses the real
-  // loginWithEmail path (not the fake phone/social demo login), so the
-  // resulting session has the actual role from the database.
+  // Seeded per-role demo accounts (scripts/seed.mjs)
   const DEMO_ACCOUNTS = [
+    { role: "customer", label: "Customer", email: "customer1@shiplync.test" },
     { role: "delivery_agent", label: "Delivery Partner", email: "agent1@shiplync.test" },
     { role: "hub_staff", label: "Hub Operations", email: "hub1@shiplync.test" },
     { role: "admin", label: "Administrator", email: "admin1@shiplync.test" },
@@ -111,17 +112,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     const result = await loginWithEmail(account.email, "shiplync-demo-2026");
     setDemoLoadingRole(null);
     if (result.error) {
-      setAuthError(`Could not sign in as the ${account.label} demo account: ${result.error}`);
+      setAuthError(`Could not sign in as ${account.label}: ${result.error}`);
       return;
     }
-    if (onSuccess) onSuccess();
-  };
-
-  const handleDemoCustomerLogin = async () => {
-    setAuthError(null);
-    setDemoLoadingRole("customer");
-    await login();
-    setDemoLoadingRole(null);
     if (onSuccess) onSuccess();
   };
 
@@ -130,8 +123,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     setTimeout(() => {
       setIsLoading(false);
       login({
-        email: `user.${provider.toLowerCase()}@shiplync.com`,
-        name: `${provider} Account`,
+        email: "customer1@shiplync.test",
+        name: "Demo Customer",
       });
       if (onSuccess) onSuccess();
     }, 600);
@@ -152,41 +145,42 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         </p>
       </div>
 
-      {/* Demo portal quick-login — the phone/social buttons below always
-          sign in as a customer, so this is the only visible way to reach
-          the Delivery Partner / Hub Operations / Administrator portals. */}
+      {/* Demo portal quick-login */}
       {mode === "login" && (
-        <div className="mb-6 rounded-xl border p-3 space-y-2">
-          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-            Quick demo login by role
+        <div className="mb-6 rounded-xl border p-3.5 space-y-2.5 bg-muted/20">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+              Quick demo login by role
+            </span>
+            <span className="text-[10px] text-muted-foreground font-mono">
+              Password: <span className="font-semibold text-foreground">shiplync-demo-2026</span>
+            </span>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="text-xs justify-start"
-              disabled={isLoading || demoLoadingRole !== null}
-              onClick={handleDemoCustomerLogin}
-            >
-              {demoLoadingRole === "customer" ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null} Customer
-            </Button>
             {DEMO_ACCOUNTS.map((a) => (
               <Button
                 key={a.role}
                 type="button"
                 variant="outline"
                 size="sm"
-                className="text-xs justify-start"
+                className="text-xs justify-start h-auto py-2 px-2.5 flex flex-col items-start gap-0.5 hover:border-primary/60 hover:bg-primary/5 transition-all text-left"
                 disabled={isLoading || demoLoadingRole !== null}
                 onClick={() => handleDemoLogin(a)}
               >
-                {demoLoadingRole === a.role ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null} {a.label}
+                <div className="flex items-center gap-1.5 w-full">
+                  {demoLoadingRole === a.role ? (
+                    <Loader2 className="h-3 w-3 animate-spin shrink-0 text-primary" />
+                  ) : null}
+                  <span className="font-semibold text-foreground text-xs">{a.label}</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground font-mono truncate w-full">
+                  {a.email}
+                </span>
               </Button>
             ))}
           </div>
           {authError && (
-            <div className="text-[11px] text-destructive">{authError}</div>
+            <div className="text-[11px] text-destructive bg-destructive/10 p-2 rounded border border-destructive/20">{authError}</div>
           )}
         </div>
       )}

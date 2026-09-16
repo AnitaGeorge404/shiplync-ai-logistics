@@ -34,7 +34,8 @@ interface AuthContextType {
   pendingRedirect: (() => void) | null;
 }
 
-const DEMO_PASSWORD = "shiplync-demo-2026";
+export const DEMO_PASSWORD = "shiplync-demo-2026";
+export const DEMO_CUSTOMER_EMAIL = "customer1@shiplync.test";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -65,9 +66,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = useCallback(
     async (customData?: Partial<UserProfile> & { password?: string }) => {
-      const email = customData?.email ?? `guest.${Date.now()}@shiplync.demo`;
+      const email = customData?.email ?? DEMO_CUSTOMER_EMAIL;
       const password = customData?.password ?? DEMO_PASSWORD;
-      const name = customData?.name ?? email.split("@")[0];
+      const name =
+        customData?.name ?? (email === DEMO_CUSTOMER_EMAIL ? "Demo Customer" : email.split("@")[0]);
 
       const signInResult = await authClient.signIn.email({ email, password });
       if (signInResult.error) {

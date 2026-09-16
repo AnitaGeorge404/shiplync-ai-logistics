@@ -68,6 +68,14 @@ const blrHubId = await upsertHub({
 await upsertVehicle({ hubId: bomHubId, registrationNumber: "MH-02-EV-2210", type: "ev_van", capacityKg: 250, isElectric: true });
 await upsertVehicle({ hubId: blrHubId, registrationNumber: "KA-05-EV-3311", type: "ev_bike", capacityKg: 25, isElectric: true });
 
+const customerId = await upsertUser({
+  email: "customer1@shiplync.test",
+  name: "Demo Customer",
+  role: "customer",
+  phone: "+91 90000 00001",
+  hubId: null,
+});
+
 const agentId = await upsertUser({
   email: "agent1@shiplync.test",
   name: "Ravi Kumar",
@@ -93,7 +101,7 @@ const adminId = await upsertUser({
 });
 
 console.log("Seeded:");
-console.log({ bomHubId, blrHubId, agentId, hubStaffId, adminId });
+console.log({ bomHubId, blrHubId, customerId, agentId, hubStaffId, adminId });
 console.log(`All demo accounts use password: ${DEMO_PASSWORD}`);
 
 await sql.end();

@@ -21,8 +21,9 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Warehouse, Plus, Search, SlidersHorizontal, Truck, ShieldAlert, ChevronRight } from "lucide-react";
+import { Warehouse, Plus, Search, SlidersHorizontal, Truck, ShieldAlert, ChevronRight, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { lookupPincode } from "@/lib/pincode";
 
 export const Route = createFileRoute("/admin/hubs/")({
   head: () => ({
@@ -50,6 +51,24 @@ function AdminHubsPage() {
   const [newPincode, setNewPincode] = useState("");
   const [newAddress, setNewAddress] = useState("");
   const [newCapacity, setNewCapacity] = useState("4000");
+  const [isPincodeLoading, setIsPincodeLoading] = useState(false);
+
+  const handlePincodeChange = async (val: string) => {
+    const formatted = val.replace(/\D/g, "").slice(0, 6);
+    setNewPincode(formatted);
+    if (formatted.length === 6 && /^[1-9]\d{5}$/.test(formatted)) {
+      setIsPincodeLoading(true);
+      try {
+        const res = await lookupPincode(formatted);
+        if (res && res.city && res.state) {
+          setNewCity(res.city);
+          setNewState(res.state);
+        }
+      } finally {
+        setIsPincodeLoading(false);
+      }
+    }
+  };
 
   const shipmentById = useMemo(() => new Map(shipments.map((s: any) => [s.id, s])), [shipments]);
 
@@ -258,7 +277,21 @@ function AdminHubsPage() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Pincode</Label>
-                <Input placeholder="411001" value={newPincode} onChange={(e) => setNewPincode(e.target.value)} required className="h-9 text-xs" />
+                <div className="relative">
+                  <Input
+                    placeholder="411001"
+                    value={newPincode}
+                    onChange={(e) => handlePincodeChange(e.target.value)}
+                    maxLength={6}
+                    required
+                    className={`h-9 text-xs ${isPincodeLoading ? "pr-8" : ""}`}
+                  />
+                  {isPincodeLoading && (
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

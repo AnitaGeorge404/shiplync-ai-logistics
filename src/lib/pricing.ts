@@ -84,17 +84,43 @@ export function estimateDeliveryHours(input: {
   receiverHasSecurityCheckpoint?: boolean;
 }) {
   const priorityKey = input.priority in EFFECTIVE_SPEED_KMH ? input.priority : "normal";
+  const dist = Math.max(input.distanceKm, 0);
+
+  const floorMinutes = Math.max(input.receiverFloorCount ?? 0, 0) * MINUTES_PER_FLOOR_NO_ELEVATOR;
+  const securityMinutes = input.receiverHasSecurityCheckpoint ? SECURITY_CHECKPOINT_MINUTES : 0;
+  const lastMileHours = (floorMinutes + securityMinutes) / 60;
+
+  // 1. Hyper-local (<= 5 km): Intra-neighborhood / same-day delivery
+  if (dist <= 5) {
+    const baseHours = priorityKey === "critical" ? 1.0 : priorityKey === "high" ? 1.8 : 2.5;
+    const handling = input.packageType === "fragile" ? 0.5 : 0;
+    return Math.round((baseHours + handling + lastMileHours) * 10) / 10;
+  }
+
+  // 2. Intra-city (5 - 30 km): Same-day dispatch across town
+  if (dist <= 30) {
+    const baseHours = priorityKey === "critical" ? 1.5 : priorityKey === "high" ? 2.5 : 4.0;
+    const transit = dist / (priorityKey === "critical" ? 40 : 25);
+    const handling = input.packageType === "fragile" ? 1.0 : 0;
+    return Math.round((baseHours + transit + handling + lastMileHours) * 10) / 10;
+  }
+
+  // 3. Intra-district / adjacent towns (30 - 100 km): Same-day / express
+  if (dist <= 100) {
+    const baseHours = priorityKey === "critical" ? 2.5 : priorityKey === "high" ? 4.5 : 6.5;
+    const transit = dist / (priorityKey === "critical" ? 60 : 40);
+    const handling = input.packageType === "fragile" ? 1.5 : 0;
+    return Math.round((baseHours + transit + handling + lastMileHours) * 10) / 10;
+  }
+
+  // 4. Regional and Inter-city (> 100 km): Multi-hub network routing
   const hubHours = HUB_PROCESSING_HOURS[priorityKey];
   const speedKmh = EFFECTIVE_SPEED_KMH[priorityKey];
   const handlingHours = HANDLING_ADJUSTMENT_HOURS[input.packageType] ?? 0;
   const minHours = MIN_HOURS_BY_PRIORITY[priorityKey];
 
-  const transitHours = Math.max(input.distanceKm, 0) / speedKmh;
+  const transitHours = dist / speedKmh;
   const networkHours = Math.max(hubHours + transitHours + handlingHours, minHours);
-
-  const floorMinutes = Math.max(input.receiverFloorCount ?? 0, 0) * MINUTES_PER_FLOOR_NO_ELEVATOR;
-  const securityMinutes = input.receiverHasSecurityCheckpoint ? SECURITY_CHECKPOINT_MINUTES : 0;
-  const lastMileHours = (floorMinutes + securityMinutes) / 60;
 
   return Math.round((networkHours + lastMileHours) * 10) / 10;
 }

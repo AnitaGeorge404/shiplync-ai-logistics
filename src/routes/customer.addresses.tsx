@@ -25,8 +25,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MapPinned, Plus, Trash2, Star, Pencil, PackagePlus } from "lucide-react";
+import { MapPinned, Plus, Trash2, Star, Pencil, PackagePlus, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { lookupPincode } from "@/lib/pincode";
 
 export const Route = createFileRoute("/customer/addresses")({
   head: () => ({
@@ -72,6 +73,36 @@ function AddressesPage() {
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Address | null>(null);
+  const [isPincodeLoading, setIsPincodeLoading] = useState(false);
+  const [pincodeSuccess, setPincodeSuccess] = useState(false);
+
+  const handlePincodeChange = async (val: string) => {
+    const formatted = val.replace(/\D/g, "").slice(0, 6);
+    setForm((prev) => ({ ...prev, pincode: formatted }));
+
+    if (formatted.length === 6 && /^[1-9]\d{5}$/.test(formatted)) {
+      setIsPincodeLoading(true);
+      setPincodeSuccess(false);
+      try {
+        const result = await lookupPincode(formatted);
+        if (result && result.city && result.state) {
+          setForm((prev) => ({
+            ...prev,
+            pincode: formatted,
+            city: result.city,
+            state: result.state,
+          }));
+          setPincodeSuccess(true);
+        }
+      } catch {
+        // ignore
+      } finally {
+        setIsPincodeLoading(false);
+      }
+    } else {
+      setPincodeSuccess(false);
+    }
+  };
 
   const { data: addressList = [], isLoading } = useQuery({
     queryKey: ["addresses"],
@@ -218,11 +249,26 @@ function AddressesPage() {
                 </div>
                 <div>
                   <Label className="text-xs">Pincode</Label>
-                  <Input
-                    value={form.pincode}
-                    onChange={(e) => setForm({ ...form, pincode: e.target.value })}
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      value={form.pincode}
+                      onChange={(e) => handlePincodeChange(e.target.value)}
+                      maxLength={6}
+                      placeholder="400002"
+                      required
+                      className={isPincodeLoading || pincodeSuccess ? "pr-8" : ""}
+                    />
+                    {isPincodeLoading && (
+                      <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                      </div>
+                    )}
+                    {pincodeSuccess && !isPincodeLoading && (
+                      <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex items-center justify-between rounded-lg border p-3">
