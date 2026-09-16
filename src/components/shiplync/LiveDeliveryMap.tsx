@@ -75,6 +75,8 @@ export function LiveDeliveryMap({
   const [routeInfo, setRouteInfo] = useState<{ distanceKm: number; durationMinutes: number } | null>(null);
   const [lastSeenSeconds, setLastSeenSeconds] = useState(0);
   const [viewMode, setViewMode] = useState<"fit" | "rider" | "dest">("fit");
+  const [tileStyle, setTileStyle] = useState<"osm" | "voyager" | "satellite">("osm");
+  const currentTileLayerRef = useRef<any>(null);
 
   const isDelivered = status === "delivered";
   const isDelivering = status === "out_for_delivery" || status === "picked_up";
@@ -148,20 +150,9 @@ export function LiveDeliveryMap({
 
       const map = L.map(mapContainerRef.current, {
         center: [centerLat, centerLng],
-        zoom: 14,
+        zoom: 15,
         zoomControl: false,
       });
-
-      // CartoDB Voyager high-contrast OpenStreetMap tiles with authorized API key
-      L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=cb1_3n29_1_c31650d1d57db5a97818078e",
-        {
-          attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-          subdomains: "abcd",
-          maxZoom: 19,
-        }
-      ).addTo(map);
 
       L.control.zoom({ position: "topright" }).addTo(map);
 
@@ -179,6 +170,50 @@ export function LiveDeliveryMap({
       }
     };
   }, []);
+
+  // Update map tile layer whenever tileStyle changes
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current || !LRef.current) return;
+    const L = LRef.current;
+    const map = mapInstanceRef.current;
+
+    if (currentTileLayerRef.current) {
+      map.removeLayer(currentTileLayerRef.current);
+    }
+
+    let layer;
+    if (tileStyle === "osm") {
+      // Standard OpenStreetMap with complete local landmarks, shops, temples, POIs, building outlines
+      layer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+      });
+    } else if (tileStyle === "satellite") {
+      // High-resolution satellite imagery
+      layer = L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+          maxZoom: 19,
+        }
+      );
+    } else {
+      // CartoDB Voyager clean styling
+      layer = L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=cb1_3n29_1_c31650d1d57db5a97818078e",
+        {
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+          subdomains: "abcd",
+          maxZoom: 19,
+        }
+      );
+    }
+
+    layer.addTo(map);
+    currentTileLayerRef.current = layer;
+  }, [tileStyle, mapReady]);
 
   // Update markers and route polylines
   useEffect(() => {
@@ -513,6 +548,49 @@ export function LiveDeliveryMap({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Map Layer Switcher: Landmarks vs Clean vs Satellite */}
+      <div className="absolute top-3 right-12 z-10 flex items-center gap-0.5 bg-background/95 backdrop-blur-md border border-border/80 rounded-xl p-1 shadow-md pointer-events-auto text-xs">
+        <button
+          type="button"
+          onClick={() => setTileStyle("osm")}
+          className={`px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 text-[11px] ${
+            tileStyle === "osm"
+              ? "bg-primary text-primary-foreground shadow-sm font-semibold"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+          title="OpenStreetMap: full local landmarks, shops, places of worship, hospitals, building outlines"
+        >
+          <MapPin className="h-3 w-3" />
+          <span>Landmarks</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTileStyle("voyager")}
+          className={`px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 text-[11px] ${
+            tileStyle === "voyager"
+              ? "bg-primary text-primary-foreground shadow-sm font-semibold"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+          title="Clean courier cartography"
+        >
+          <Compass className="h-3 w-3" />
+          <span className="hidden sm:inline">Clean</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTileStyle("satellite")}
+          className={`px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 text-[11px] ${
+            tileStyle === "satellite"
+              ? "bg-primary text-primary-foreground shadow-sm font-semibold"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+          title="Aerial satellite view"
+        >
+          <Radio className="h-3 w-3" />
+          <span className="hidden sm:inline">Satellite</span>
+        </button>
       </div>
 
       {/* Camera / Navigation Controls */}
