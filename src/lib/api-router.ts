@@ -26,6 +26,7 @@ import {
   dimensionSchema,
 } from "./validation";
 import { eq, desc, and, or, isNull, isNotNull, gte, notInArray, sql as dsql } from "drizzle-orm";
+import { getDeliveryOtp, verifyDeliveryOtp } from "./otp";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -180,6 +181,7 @@ const attemptSchema = z.object({
     "returned",
   ]),
   reason: z.string().optional(),
+  otp: z.string().optional(),
   otpVerified: z.boolean().default(false),
 });
 
@@ -390,7 +392,12 @@ export async function handleApiRequest(request: Request): Promise<Response> {
           .orderBy(desc(shipments.createdAt));
       }
 
-      return json({ shipments: rows });
+      const shipmentsWithOtp = rows.map((s) => ({
+        ...s,
+        deliveryOtp: getDeliveryOtp(s.trackingId),
+      }));
+
+      return json({ shipments: shipmentsWithOtp });
     }
 
     // GET /api/shipments/track/:trackingId — public
@@ -437,7 +444,13 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         .where(eq(exceptions.shipmentId, shipment.id))
         .orderBy(desc(exceptions.createdAt));
 
-      return json({ shipment, events, currentHubName, attempts, exceptions: shipmentExceptions });
+      return json({
+        shipment: { ...shipment, deliveryOtp: getDeliveryOtp(shipment.trackingId) },
+        events,
+        currentHubName,
+        attempts,
+        exceptions: shipmentExceptions,
+      });
     }
 
     // PATCH /api/shipments/:id/status — delivery_agent, hub_staff, admin
@@ -701,6 +714,20 @@ export async function handleApiRequest(request: Request): Promise<Response> {
           },
           409,
         );
+      }
+
+      // Verification of customer 4-digit delivery OTP on successful delivery
+      if (parsed.data.outcome === "delivered") {
+        const submittedOtp =
+          parsed.data.otp || (parsed.data.reason?.match(/\b\d{4}\b/)?.[0] ?? "");
+        if (!verifyDeliveryOtp(existing.trackingId, submittedOtp)) {
+          return json(
+            {
+              error: "Wrong OTP, try again",
+            },
+            400,
+          );
+        }
       }
 
       const priorAttempts = await db

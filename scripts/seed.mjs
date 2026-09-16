@@ -42,10 +42,10 @@ async function upsertVehicle({ hubId, registrationNumber, type, capacityKg, isEl
 }
 
 const bomHubId = await upsertHub({
-  name: "Mumbai Main Hub",
-  code: "BOM-MAIN",
-  addressLine: "Andheri East Logistics Park",
-  city: "Mumbai",
+  name: "Regional Hub 2",
+  code: "HUB-02",
+  addressLine: "Regional Logistics Hub",
+  city: "Hub",
   state: "MH",
   pincode: "400069",
   lat: 19.1136,
@@ -54,10 +54,10 @@ const bomHubId = await upsertHub({
 });
 
 const blrHubId = await upsertHub({
-  name: "Bengaluru Dispatch Center",
-  code: "BLR-DC1",
-  addressLine: "Whitefield Industrial Area",
-  city: "Bengaluru",
+  name: "Central Hub",
+  code: "HUB-01",
+  addressLine: "Central Logistics Center",
+  city: "Hub",
   state: "KA",
   pincode: "560066",
   lat: 12.9698,

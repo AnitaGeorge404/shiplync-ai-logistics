@@ -4,8 +4,9 @@ import { StatCard } from "@/components/shiplync/StatCard";
 import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { RouteMap } from "@/components/shiplync/RouteMap";
 import { Button } from "@/components/ui/button";
-import { Package, Truck, CheckCircle2, Clock, ArrowRight, MapPinned } from "lucide-react";
+import { Package, Truck, CheckCircle2, Clock, ArrowRight, MapPinned, KeyRound } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { getDeliveryOtp } from "@/lib/otp";
 
 export const Route = createFileRoute("/customer/")({
   component: CustomerDashboard,
@@ -83,7 +84,14 @@ function CustomerDashboard() {
           <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
             <div>
               <div className="text-xs uppercase tracking-widest text-muted-foreground">Featured shipment</div>
-              <div className="font-display text-lg font-semibold mt-0.5">{featured.trackingId}</div>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <span className="font-display text-lg font-semibold">{featured.trackingId}</span>
+                {featured.status !== "delivered" && featured.status !== "cancelled" && featured.status !== "returned" && (
+                  <span className="inline-flex items-center gap-1 font-mono text-xs bg-primary/10 text-primary border border-primary/25 rounded px-2 py-0.5 font-semibold">
+                    <KeyRound className="h-3 w-3" /> OTP: {featured.deliveryOtp || getDeliveryOtp(featured.trackingId)}
+                  </span>
+                )}
+              </div>
               <div className="text-sm text-muted-foreground">
                 {featured.senderCity} → {featured.receiverCity} · {featured.packageType}
               </div>
@@ -146,7 +154,12 @@ function CustomerDashboard() {
             >
               <div className="flex items-center justify-between sm:block sm:col-span-3">
                 <div>
-                  <div className="text-xs text-muted-foreground font-mono">{s.trackingId}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-muted-foreground font-mono">{s.trackingId}</span>
+                    <span className="inline-flex items-center gap-1 font-mono text-[10px] bg-primary/10 text-primary border border-primary/20 rounded px-1.5 py-0.5 font-semibold">
+                      <KeyRound className="h-2.5 w-2.5" /> OTP: {s.deliveryOtp || getDeliveryOtp(s.trackingId)}
+                    </span>
+                  </div>
                   <div className="text-sm font-medium mt-0.5">{s.senderCity} → {s.receiverCity}</div>
                 </div>
                 <div className="sm:hidden"><StatusBadge status={toBadgeStatus(s.status)} /></div>

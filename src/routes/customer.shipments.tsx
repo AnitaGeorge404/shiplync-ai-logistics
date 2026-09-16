@@ -6,7 +6,8 @@ import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search } from "lucide-react";
+import { Search, KeyRound } from "lucide-react";
+import { getDeliveryOtp } from "@/lib/otp";
 
 export const Route = createFileRoute("/customer/shipments")({
   head: () => ({ meta: [{ title: "Shipment history — ShipLync" }, { name: "description", content: "All your ShipLync shipments." }] }),
@@ -98,10 +99,15 @@ function History() {
                       <Link
                         to="/customer/track/$id"
                         params={{ id: s.trackingId }}
-                        className="font-mono text-xs text-primary hover:underline"
+                        className="font-mono text-xs text-primary hover:underline block font-semibold"
                       >
                         {s.trackingId}
                       </Link>
+                      {s.status !== "delivered" && s.status !== "cancelled" && s.status !== "returned" && (
+                        <span className="inline-flex items-center gap-1 font-mono text-[10px] bg-primary/10 text-primary border border-primary/25 rounded px-1.5 py-0.5 font-semibold mt-1">
+                          <KeyRound className="h-2.5 w-2.5" /> OTP: {s.deliveryOtp || getDeliveryOtp(s.trackingId)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-4">
                       <div className="font-medium">{s.senderCity} → {s.receiverCity}</div>
@@ -135,7 +141,14 @@ function History() {
                 className="card-elevated p-4 space-y-2 block"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-primary">{s.trackingId}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs text-primary font-semibold">{s.trackingId}</span>
+                    {s.status !== "delivered" && s.status !== "cancelled" && s.status !== "returned" && (
+                      <span className="inline-flex items-center gap-1 font-mono text-[10px] bg-primary/10 text-primary border border-primary/25 rounded px-1.5 py-0.5 font-semibold">
+                        <KeyRound className="h-2.5 w-2.5" /> OTP: {s.deliveryOtp || getDeliveryOtp(s.trackingId)}
+                      </span>
+                    )}
+                  </div>
                   <StatusBadge status={toBadgeStatus(s.status)} />
                 </div>
                 <div className="text-sm font-medium">{s.senderCity} → {s.receiverCity}</div>

@@ -35,7 +35,7 @@ export function HubDashboard() {
   return (
     <div className="space-y-6">
       <div className="border-b pb-4">
-        <div className="text-xs uppercase tracking-wide text-muted-foreground">{myHub ? `${myHub.code} · ${myHub.city}` : "Hub operations"}</div>
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">{myHub ? myHub.name : "Hub operations"}</div>
         <h1 className="text-2xl font-semibold mt-1">
           Sorting bay — {arrived.length} active scanned{myHub ? ` · ${myHub.loadPct}% capacity` : ""}
         </h1>

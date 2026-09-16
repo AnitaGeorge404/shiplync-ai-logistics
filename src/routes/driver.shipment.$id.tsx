@@ -28,6 +28,7 @@ import {
   KeyRound,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   Building2,
   Loader2,
 } from "lucide-react";
@@ -57,6 +58,7 @@ function ShipmentDetailPage() {
   const [busy, setBusy] = useState(false);
   const [panel, setPanel] = useState<"none" | "delivered" | "failed">("none");
   const [otp, setOtp] = useState("");
+  const [otpError, setOtpError] = useState<string | null>(null);
   const [reason, setReason] = useState(FAILED_ATTEMPT_REASONS[0].value);
   const [notes, setNotes] = useState("");
   const [justFailed, setJustFailed] = useState(false);
@@ -110,6 +112,7 @@ function ShipmentDetailPage() {
 
   async function submitDelivered(e: React.FormEvent) {
     e.preventDefault();
+    setOtpError(null);
     setBusy(true);
     try {
       const res = await fetch(`/api/shipments/${id}/attempts`, {
@@ -117,18 +120,22 @@ function ShipmentDetailPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           outcome: "delivered",
-          reason: `OTP ${otp} verified by delivery agent.`,
+          otp: otp.trim(),
+          reason: `OTP ${otp.trim()} verified by delivery agent.`,
           otpVerified: true,
         }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast.error(data.error || "Could not complete delivery");
+        const msg = data.error || "Wrong OTP, try again";
+        toast.error(msg);
+        setOtpError(msg);
         return;
       }
       toast.success("Delivered! Proof of delivery recorded.");
       setPanel("none");
       setOtp("");
+      setOtpError(null);
       await refresh();
     } finally {
       setBusy(false);
@@ -230,30 +237,52 @@ function ShipmentDetailPage() {
 
         {panel === "delivered" && (
           <form onSubmit={submitDelivered} className="space-y-3 border-t pt-3">
-            <Label className="text-xs flex items-center gap-1.5">
-              <KeyRound className="h-3.5 w-3.5" /> Enter 4-digit customer OTP
-            </Label>
-            <Input
-              value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-              maxLength={4}
-              inputMode="numeric"
-              placeholder="e.g. 4210"
-              required
-              autoFocus
-              className="h-11 text-center font-mono text-lg tracking-widest"
-            />
+            <div>
+              <Label className="text-xs flex items-center gap-1.5 font-medium">
+                <KeyRound className="h-3.5 w-3.5 text-primary" /> Enter 4-digit customer OTP
+              </Label>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Ask the recipient for the 4-digit delivery verification code shown on their tracking screen.
+              </p>
+            </div>
+            <div>
+              <Input
+                value={otp}
+                onChange={(e) => {
+                  setOtp(e.target.value.replace(/\D/g, ""));
+                  if (otpError) setOtpError(null);
+                }}
+                maxLength={4}
+                inputMode="numeric"
+                placeholder="e.g. 1234"
+                required
+                autoFocus
+                className={`h-12 text-center font-mono text-xl tracking-widest font-bold ${
+                  otpError ? "border-destructive focus-visible:ring-destructive text-destructive" : ""
+                }`}
+              />
+              {otpError && (
+                <p className="text-xs text-destructive font-medium flex items-center justify-center gap-1.5 mt-2 animate-in fade-in duration-200">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  {otpError}
+                </p>
+              )}
+            </div>
             <div className="flex gap-2">
               <Button
                 type="button"
                 variant="outline"
                 className="flex-1 h-10"
-                onClick={() => setPanel("none")}
+                onClick={() => {
+                  setPanel("none");
+                  setOtpError(null);
+                }}
               >
                 Cancel
               </Button>
-              <Button type="submit" className="flex-1 h-10" disabled={busy}>
-                {busy ? "Saving…" : "Confirm delivered"}
+              <Button type="submit" className="flex-1 h-10 gap-1.5" disabled={busy || otp.trim().length !== 4}>
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {busy ? "Verifying…" : "Verify OTP & deliver"}
               </Button>
             </div>
           </form>

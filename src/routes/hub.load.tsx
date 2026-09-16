@@ -40,7 +40,7 @@ function HubLoadPage() {
           <div className="flex items-center justify-between mb-3">
             <div>
               <div className="text-xs uppercase tracking-widest text-muted-foreground">This hub</div>
-              <div className="font-display text-xl font-semibold mt-0.5">{myHub.code} · {myHub.city}</div>
+              <div className="font-display text-xl font-semibold mt-0.5">{myHub.name}</div>
             </div>
             <Badge
               variant="outline"

@@ -5,8 +5,10 @@ import { ShipmentMilestones } from "@/components/shiplync/ShipmentMilestones";
 import { Timeline } from "@/components/shiplync/Timeline";
 import { Barcode } from "@/components/shiplync/Barcode";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { toBadgeStatus, toProgress } from "@/lib/api-hooks";
-import { ShieldCheck, Camera, ArrowLeft, Share2, AlertTriangle, RotateCcw, CheckCircle2, XCircle } from "lucide-react";
+import { getDeliveryOtp } from "@/lib/otp";
+import { ShieldCheck, Camera, ArrowLeft, Share2, AlertTriangle, RotateCcw, CheckCircle2, XCircle, KeyRound, Copy } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/customer/track/$id")({
@@ -78,6 +80,45 @@ function TrackShipment() {
           </Button>
         </div>
       </div>
+
+      {s.status !== "delivered" && s.status !== "cancelled" && s.status !== "returned" && (
+        <div className="card-elevated p-4 sm:p-5 border-primary/30 bg-primary/5">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-primary/15 text-primary grid place-items-center shrink-0">
+                <KeyRound className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs uppercase tracking-wider font-semibold text-foreground">Delivery Verification OTP</span>
+                  <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/25">
+                    Required for drop-off
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Share this 4-digit code with your delivery partner to verify and complete delivery.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <div className="font-mono text-2xl sm:text-3xl font-bold tracking-widest text-primary bg-background px-4 py-1.5 rounded-lg border border-primary/30 shadow-sm">
+                {s.deliveryOtp || getDeliveryOtp(s.trackingId)}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 h-10 px-3"
+                onClick={() => {
+                  navigator.clipboard?.writeText(s.deliveryOtp || getDeliveryOtp(s.trackingId));
+                  toast.success("Delivery OTP copied to clipboard");
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" /> Copy
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card-elevated p-5 sm:p-6">
         <ShipmentMilestones status={s.status} events={data.events} />
@@ -177,8 +218,21 @@ function TrackShipment() {
 
           <div className="card-elevated p-5">
             <div className="text-sm font-medium flex items-center gap-2"><Camera className="h-4 w-4" /> Proof of delivery</div>
-            <div className="mt-3 rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
-              {s.status === "delivered" ? "Delivered — OTP verified at drop-off." : "Will appear here once delivered."}
+            <div className="mt-3 rounded-lg border border-dashed p-5 text-center text-xs text-muted-foreground">
+              {s.status === "delivered" ? (
+                <div className="space-y-1 text-success">
+                  <CheckCircle2 className="h-6 w-6 mx-auto text-success" />
+                  <div className="font-semibold text-sm">Delivered Successfully</div>
+                  <div className="text-xs text-muted-foreground">
+                    OTP Verified ({s.deliveryOtp || getDeliveryOtp(s.trackingId)}) by delivery partner at drop-off.
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="font-medium text-foreground">Delivery verification pending</div>
+                  <div>Share OTP {s.deliveryOtp || getDeliveryOtp(s.trackingId)} with agent at arrival.</div>
+                </div>
+              )}
             </div>
           </div>
 
