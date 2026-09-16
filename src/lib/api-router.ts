@@ -35,8 +35,13 @@ function json(data: unknown, status = 200) {
 }
 
 async function getSessionUser(request: Request) {
-  const session = await auth.api.getSession({ headers: request.headers });
-  return session?.user ?? null;
+  try {
+    const session = await auth.api.getSession({ headers: request.headers });
+    return session?.user ?? null;
+  } catch (err) {
+    console.warn("[api-router] Transient session verification failure (will retry on next request):", err);
+    return null;
+  }
 }
 
 function requireRole(user: { role?: string | null } | null | undefined, roles: string[]) {
