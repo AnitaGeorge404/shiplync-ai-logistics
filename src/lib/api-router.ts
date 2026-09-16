@@ -348,14 +348,13 @@ export async function handleApiRequest(request: Request): Promise<Response> {
           .where(eq(shipments.assignedAgentId, user.id))
           .orderBy(desc(shipments.updatedAt));
       } else if (scope === "hub" && (role === "hub_staff" || role === "admin")) {
-        const hubId = (user as any).hubId;
-        rows = hubId
-          ? await db
-              .select()
-              .from(shipments)
-              .where(eq(shipments.currentHubId, hubId))
-              .orderBy(desc(shipments.updatedAt))
-          : [];
+        // As requested: show active scanned/intaken bookings without filtering by location for now,
+        // and exclude completed records (delivered, returned, cancelled).
+        rows = await db
+          .select()
+          .from(shipments)
+          .where(notInArray(shipments.status, ["delivered", "returned", "cancelled"]))
+          .orderBy(desc(shipments.updatedAt));
       } else if (scope === "hub_transfers" && (role === "hub_staff" || role === "admin")) {
         // Shipments genuinely mid hub-to-hub transfer — either departing this
         // hub (currentHubId = mine) or inbound to it (destinationHubId =

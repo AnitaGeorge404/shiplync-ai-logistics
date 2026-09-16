@@ -20,17 +20,15 @@ export function HubDashboard() {
   const { data: transfers = [] } = useShipments("hub_transfers");
 
   const myHub = allHubs.find((h: any) => h.id === user?.hubId);
-  const incoming = hubShipments.filter((s: any) => ["picked_up", "in_transit"].includes(s.status));
+  const incoming = hubShipments.filter((s: any) => ["booked", "picked_up", "in_transit"].includes(s.status));
   const arrived = hubShipments.filter((s: any) => s.status === "arrived_hub");
-  const pendingIntake = arrived.filter((s: any) => !s.assignedAgentId);
+  const pendingIntake = hubShipments.filter((s: any) => s.status === "booked" || (s.status === "arrived_hub" && !s.assignedAgentId));
   const pendingDispatch = arrived.filter((s: any) => !!s.assignedAgentId);
   const priorityShipments = hubShipments.filter(
-    (s: any) => !["delivered", "cancelled", "returned"].includes(s.status) && (s.packageType === "medical" || s.priority !== "normal" || s.elderlyCare),
+    (s: any) => (s.packageType === "medical" || s.priority !== "normal" || s.elderlyCare),
   );
-  // Real per-hub loadPct (active shipments vs declared capacity, from
-  // GET /api/hubs) when we know which hub this is — falls back to the
-  // on-floor heuristic only if the account has no hub assigned.
-  const loadPct = myHub ? myHub.loadPct : hubShipments.length > 0 ? Math.min(100, Math.round((arrived.length / hubShipments.length) * 100)) : 0;
+  // Real per-hub loadPct when we know which hub this is
+  const loadPct = myHub ? myHub.loadPct : hubShipments.length > 0 ? Math.min(100, Math.round((arrived.length / Math.max(1, hubShipments.length)) * 100)) : 0;
   const outboundTransfers = transfers.filter((s: any) => s.currentHubId === user?.hubId);
   const inboundTransfers = transfers.filter((s: any) => s.destinationHubId === user?.hubId && s.currentHubId !== user?.hubId);
 
@@ -39,14 +37,14 @@ export function HubDashboard() {
       <div className="border-b pb-4">
         <div className="text-xs uppercase tracking-wide text-muted-foreground">{myHub ? `${myHub.code} · ${myHub.city}` : "Hub operations"}</div>
         <h1 className="text-2xl font-semibold mt-1">
-          Sorting bay — {arrived.length} on floor{myHub ? ` · ${myHub.loadPct}% capacity` : ""}
+          Sorting bay — {arrived.length} active scanned{myHub ? ` · ${myHub.loadPct}% capacity` : ""}
         </h1>
       </div>
 
       {/* Level 1 — operational queues at a glance */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <StatCard label="Incoming" value={String(incoming.length)} icon={<Inbox />} />
-        <StatCard label="Pending intake" value={String(pendingIntake.length)} icon={<PackageOpen />} />
+        <StatCard label="Incoming / Booked" value={String(incoming.length)} icon={<Inbox />} />
+        <StatCard label="Scanned on floor" value={String(arrived.length)} icon={<PackageOpen />} />
         <StatCard label="Priority" value={String(priorityShipments.length)} icon={<HeartPulse />} tone={priorityShipments.length > 0 ? "warning" : "default"} />
         <StatCard label="Pending dispatch" value={String(pendingDispatch.length)} icon={<Truck />} />
         <StatCard label="Exceptions" value={String(exceptions.length)} icon={<AlertTriangle />} tone={exceptions.length > 0 ? "destructive" : "default"} />
@@ -56,7 +54,7 @@ export function HubDashboard() {
         {/* Pending intake queue */}
         <div className="lg:col-span-2 card-elevated overflow-hidden">
           <div className="px-4 py-3 border-b flex items-center justify-between">
-            <div className="text-sm font-semibold">Pending intake</div>
+            <div className="text-sm font-semibold">Active bookings & intake queue</div>
             <Button size="sm" variant="outline" className="gap-1.5" asChild><Link to="/hub/intake"><ScanLine className="h-3.5 w-3.5" /> Open scanner</Link></Button>
           </div>
           <div className="divide-y">
@@ -71,7 +69,11 @@ export function HubDashboard() {
                 <div className="col-span-3 font-mono">{r.trackingId}</div>
                 <div className="col-span-3">{r.senderCity} → {r.receiverCity}</div>
                 <div className="col-span-2 capitalize text-muted-foreground">{r.packageType}</div>
-                <div className="col-span-2 text-muted-foreground">{r.weightKg} kg</div>
+                <div className="col-span-2">
+                  <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium capitalize ${r.status === 'arrived_hub' ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground'}`}>
+                    {r.status === 'arrived_hub' ? 'Scanned' : r.status.replace(/_/g, " ")}
+                  </span>
+                </div>
                 <div className="col-span-2 flex justify-end">
                   {(r.packageType === "medical" || r.priority !== "normal") && (
                     <span className="rounded-sm bg-medical/10 text-medical border border-medical/25 px-1.5 py-0.5 text-[10px] font-medium capitalize">{r.priority !== "normal" ? r.priority : "Medical"}</span>

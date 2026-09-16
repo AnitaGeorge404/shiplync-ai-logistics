@@ -38,9 +38,11 @@ function HubDispatchPage() {
   const [sortKey, setSortKey] = useState<SortKey>("priority");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  // Shipments already mid hub-to-hub transfer belong on /hub/transfers, not
-  // here — this page is for handing a shipment to a local delivery agent.
-  const dispatchScope = useMemo(() => hubShipments.filter((s: any) => !s.destinationHubId), [hubShipments]);
+  // Shipments ready for dispatch — only parcels that have been intaken/scanned at the hub
+  const dispatchScope = useMemo(
+    () => hubShipments.filter((s: any) => !s.destinationHubId && ["arrived_hub", "out_for_delivery"].includes(s.status)),
+    [hubShipments],
+  );
 
   const filtered = useMemo(() => {
     const rows = dispatchScope.filter((s: any) => {
