@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Package2, LogIn, Bell } from "lucide-react";
+import { Package2, LogIn, Bell, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/context/AuthContext";
@@ -118,19 +118,31 @@ export function DriverShell({ nav, children }: Props) {
             )}
           </Link>
           {user ? (
-            <button
-              onClick={logout}
-              className="hidden lg:flex items-center gap-2 cursor-pointer"
-              title="Click to sign out"
-            >
-              <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground grid place-items-center text-xs font-semibold">
-                {user.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .toUpperCase()}
-              </div>
-            </button>
+            <>
+              <button
+                onClick={logout}
+                className="hidden lg:flex items-center gap-2 cursor-pointer"
+                title="Click to sign out"
+              >
+                <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground grid place-items-center text-xs font-semibold">
+                  {user.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .toUpperCase()}
+                </div>
+              </button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 lg:hidden"
+                aria-label="Sign out"
+                title="Sign out"
+                onClick={logout}
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </>
           ) : (
             <Button
               size="sm"
