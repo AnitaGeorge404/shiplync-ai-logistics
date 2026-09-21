@@ -1,9 +1,10 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Bell, Search, Command, Package2, Moon, Sun, LogIn } from "lucide-react";
+import { Bell, Search, Command, Package2, Moon, Sun, LogIn, Menu, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -15,10 +16,48 @@ type Props = {
   children: ReactNode;
 };
 
+function NavLinks({ nav, pathname, onNavigate }: { nav: NavItem[]; pathname: string; onNavigate?: () => void }) {
+  return (
+    <nav className="flex-1 min-h-0 px-2 py-3 space-y-0.5 overflow-y-auto">
+      {nav.map((item, i) => {
+        const active = pathname === item.to || (item.to !== "/" && pathname.startsWith(item.to));
+        const showSection = item.section && item.section !== nav[i - 1]?.section;
+        return (
+          <div key={item.to}>
+            {showSection && (
+              <div className={`px-2.5 text-[10px] font-medium uppercase tracking-wide text-sidebar-foreground/40 ${i === 0 ? "pb-1.5" : "pt-3.5 pb-1.5"}`}>
+                {item.section}
+              </div>
+            )}
+            <Link
+              to={item.to}
+              onClick={onNavigate}
+              className={`flex items-center gap-2.5 px-2.5 py-2 lg:py-1.5 rounded-md text-[13px] transition-colors ${
+                active
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+              }`}
+            >
+              <span className="[&>svg]:h-4 [&>svg]:w-4 shrink-0">{item.icon}</span>
+              <span className="flex-1 truncate">{item.label}</span>
+              {item.badge && (
+                <Badge variant="secondary" className="h-5 px-1.5 text-[10px] shrink-0">
+                  {item.badge}
+                </Badge>
+              )}
+            </Link>
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function PortalShell({ portal, nav, children }: Props) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { user, logout, openAuthModal } = useAuth();
   const [dark, setDark] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   useEffect(() => {
     const root = document.documentElement;
     if (dark) root.classList.add("dark");
@@ -37,41 +76,56 @@ export function PortalShell({ portal, nav, children }: Props) {
             <div className="text-[10px] uppercase tracking-wide text-sidebar-foreground/60 mt-1">{portal}</div>
           </div>
         </Link>
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {nav.map((item, i) => {
-            const active = pathname === item.to || (item.to !== "/" && pathname.startsWith(item.to));
-            const showSection = item.section && item.section !== nav[i - 1]?.section;
-            return (
-              <div key={item.to}>
-                {showSection && (
-                  <div className={`px-2.5 text-[10px] font-medium uppercase tracking-wide text-sidebar-foreground/40 ${i === 0 ? "pb-1.5" : "pt-3.5 pb-1.5"}`}>
-                    {item.section}
-                  </div>
-                )}
-                <Link
-                  to={item.to}
-                  className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] transition-colors ${
-                    active
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-                  }`}
-                >
-                  <span className="[&>svg]:h-4 [&>svg]:w-4 shrink-0">{item.icon}</span>
-                  <span className="flex-1 truncate">{item.label}</span>
-                  {item.badge && (
-                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px] shrink-0">
-                      {item.badge}
-                    </Badge>
-                  )}
-                </Link>
-              </div>
-            );
-          })}
-        </nav>
+        <NavLinks nav={nav} pathname={pathname} />
       </aside>
+
+      {/* Mobile nav drawer — same nav data/markup as the desktop sidebar,
+          reached via the hamburger button in the mobile header. */}
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent side="left" className="w-72 p-0 flex flex-col bg-sidebar text-sidebar-foreground border-sidebar-border">
+          <SheetHeader className="px-4 h-14 border-b border-sidebar-border flex-row items-center gap-2.5 space-y-0 text-left">
+            <div className="h-7 w-7 rounded-md grid place-items-center bg-sidebar-primary text-sidebar-primary-foreground shrink-0">
+              <Package2 className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <SheetTitle className="font-semibold text-sm leading-none truncate text-sidebar-foreground">ShipLync</SheetTitle>
+              <div className="text-[10px] uppercase tracking-wide text-sidebar-foreground/60 mt-1">{portal}</div>
+            </div>
+          </SheetHeader>
+          <NavLinks nav={nav} pathname={pathname} onNavigate={() => setMobileNavOpen(false)} />
+          <div className="border-t border-sidebar-border p-3">
+            {user ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  logout();
+                }}
+                className="w-full flex items-center gap-2.5 rounded-lg p-2 hover:bg-sidebar-accent/60 text-left cursor-pointer"
+              >
+                <LogOut className="h-4 w-4 text-sidebar-foreground/70" />
+                <span className="text-xs font-medium">Sign out</span>
+              </button>
+            ) : (
+              <Button size="sm" className="w-full gap-1.5 text-xs" onClick={() => { setMobileNavOpen(false); openAuthModal(); }}>
+                <LogIn className="h-3.5 w-3.5" /> Sign in
+              </Button>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-14 border-b bg-background sticky top-0 z-20 flex items-center gap-3 px-4 lg:px-6">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 lg:hidden -ml-1"
+            aria-label="Open navigation menu"
+            onClick={() => setMobileNavOpen(true)}
+          >
+            <Menu className="h-4.5 w-4.5" />
+          </Button>
           <div className="lg:hidden flex items-center gap-2 mr-1">
             <div className="h-7 w-7 rounded-md grid place-items-center text-primary-foreground bg-primary">
               <Package2 className="h-3.5 w-3.5" />
