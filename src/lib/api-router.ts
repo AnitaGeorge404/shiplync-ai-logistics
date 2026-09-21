@@ -477,6 +477,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
           senderAddressLine: shipments.senderAddressLine,
           senderLat: shipments.senderLat,
           senderLng: shipments.senderLng,
+          currentLocationCity: shipments.currentLocationCity,
           estimatedDeliveryAt: shipments.estimatedDeliveryAt,
         })
         .from(shipments)
@@ -494,14 +495,21 @@ export async function handleApiRequest(request: Request): Promise<Response> {
             addressLine: shipment.receiverAddressLine,
           });
 
-      const rawOrigin = shipment.senderLat && shipment.senderLng
-        ? { lat: shipment.senderLat, lng: shipment.senderLng }
-        : resolveLocationCoords({
-            city: shipment.senderCity,
-            state: shipment.senderState,
-            pincode: shipment.senderPincode,
-            addressLine: shipment.senderAddressLine,
-          });
+      // Once a hub scan has set a demo current-location city, the map's
+      // "hub" pin and the driver's simulated starting point both move to
+      // there instead of staying pinned at the original pickup city — a
+      // shipment scanned near its destination shouldn't still show its
+      // rider setting off from hundreds of km away at pickup.
+      const rawOrigin = shipment.currentLocationCity
+        ? resolveLocationCoords({ city: shipment.currentLocationCity, state: shipment.receiverState })
+        : shipment.senderLat && shipment.senderLng
+          ? { lat: shipment.senderLat, lng: shipment.senderLng }
+          : resolveLocationCoords({
+              city: shipment.senderCity,
+              state: shipment.senderState,
+              pincode: shipment.senderPincode,
+              addressLine: shipment.senderAddressLine,
+            });
 
       const { origin: originCoords, dest: destCoords } = ensureDistinctCoords(rawOrigin, rawDest);
 
@@ -585,14 +593,21 @@ export async function handleApiRequest(request: Request): Promise<Response> {
             addressLine: shipment.receiverAddressLine,
           });
 
-      const rawOrigin = shipment.senderLat && shipment.senderLng
-        ? { lat: shipment.senderLat, lng: shipment.senderLng }
-        : resolveLocationCoords({
-            city: shipment.senderCity,
-            state: shipment.senderState,
-            pincode: shipment.senderPincode,
-            addressLine: shipment.senderAddressLine,
-          });
+      // Once a hub scan has set a demo current-location city, the map's
+      // "hub" pin and the driver's simulated starting point both move to
+      // there instead of staying pinned at the original pickup city — a
+      // shipment scanned near its destination shouldn't still show its
+      // rider setting off from hundreds of km away at pickup.
+      const rawOrigin = shipment.currentLocationCity
+        ? resolveLocationCoords({ city: shipment.currentLocationCity, state: shipment.receiverState })
+        : shipment.senderLat && shipment.senderLng
+          ? { lat: shipment.senderLat, lng: shipment.senderLng }
+          : resolveLocationCoords({
+              city: shipment.senderCity,
+              state: shipment.senderState,
+              pincode: shipment.senderPincode,
+              addressLine: shipment.senderAddressLine,
+            });
 
       const { origin: originCoords, dest: destCoords } = ensureDistinctCoords(rawOrigin, rawDest);
 
