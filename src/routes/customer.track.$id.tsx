@@ -306,7 +306,14 @@ function TrackShipment() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Fact k="Current location" v={data.currentHubName ? `${data.currentHubName}` : nextEvent.replace(/_/g, " ")} />
+            <Fact
+              k="Current location"
+              v={
+                s.currentLocationCity
+                  ? `${s.currentLocationCity} Hub`
+                  : data.currentHubName ?? nextEvent.replace(/_/g, " ")
+              }
+            />
             <Fact k="Priority" v={s.priority} />
             <Fact k="Distance" v={s.distanceKm ? `${Math.round(s.distanceKm)} km` : "—"} />
             <Fact k="Package" v={`${s.packageType} · ${s.weightKg} kg`} />

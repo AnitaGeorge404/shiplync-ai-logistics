@@ -215,6 +215,10 @@ export const shipments = pgTable(
     originHubId: uuid("origin_hub_id").references(() => hubs.id),
     currentHubId: uuid("current_hub_id").references(() => hubs.id),
     destinationHubId: uuid("destination_hub_id").references(() => hubs.id),
+    // Customer-facing "current location" city — deterministically derived
+    // from the destination (see getNearestMajorLogisticsCity), not the
+    // physical geography of currentHubId. Set on each hub scan.
+    currentLocationCity: text("current_location_city"),
     assignedAgentId: text("assigned_agent_id").references(() => user.id),
     assignedVehicleId: uuid("assigned_vehicle_id").references(() => vehicles.id),
 

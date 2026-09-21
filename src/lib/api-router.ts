@@ -16,6 +16,7 @@ import { auth } from "./auth";
 import { calculateShipmentCost, estimateDeliveryHours, generateTrackingId } from "./pricing";
 import { detectExceptions } from "./exception-detection";
 import { calculateDistance, resolveLocationCoords } from "./distance";
+import { getNearestMajorLogisticsCity } from "./logistics-city";
 import {
   updateDriverLocation,
   getDriverLocation,
@@ -711,6 +712,20 @@ export async function handleApiRequest(request: Request): Promise<Response> {
           .where(eq(hubs.id, (user as any).hubId))
           .limit(1);
         if (actorHub) eventLocation = actorHub.name;
+
+        // Demo/product simulation, not real GPS: derive the customer-facing
+        // "current location" from the destination rather than the actual
+        // (often geographically arbitrary, given limited seed hubs)
+        // physical hub, so tracking reads as meaningful in a live demo.
+        const destinationCity = getNearestMajorLogisticsCity({
+          city: existing.receiverCity,
+          state: existing.receiverState,
+          pincode: existing.receiverPincode,
+        });
+        updates.currentLocationCity = destinationCity;
+        eventNote = eventNote
+          ? `${eventNote} Currently at ${destinationCity} Hub.`
+          : `Currently at ${destinationCity} Hub.`;
 
         // A shipment mid hub-to-hub transfer (see POST .../transfer) finishes
         // that leg the moment it's scanned in anywhere — clear
