@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, useParams } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { RouteMap } from "@/components/shiplync/RouteMap";
 import { LiveDeliveryMap } from "@/components/shiplync/LiveDeliveryMap";
@@ -14,33 +15,37 @@ import { ShieldCheck, Camera, ArrowLeft, Share2, AlertTriangle, RotateCcw, Check
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/customer/track/$id")({
-  loader: async ({ params }) => {
-    if (typeof window === "undefined") return null; // resolved client-side; see below
-    const res = await fetch(`/api/shipments/track/${encodeURIComponent(params.id)}`);
-    if (!res.ok) throw notFound();
-    return res.json() as Promise<{
-      shipment: any;
-      events: any[];
-      currentHubName: string | null;
-      attempts: any[];
-      exceptions: any[];
-      destinationCoords?: { lat: number; lng: number };
-      originCoords?: { lat: number; lng: number };
-      liveLocation?: any;
-      partner?: any;
-    }>;
-  },
-  head: ({ loaderData }) => ({
+  head: () => ({
     meta: [
-      { title: loaderData?.shipment ? `Tracking ${loaderData.shipment.trackingId} — ShipLync` : "Track shipment — ShipLync" },
+      { title: "Track shipment — ShipLync" },
       { name: "description", content: "Live shipment tracking with map, ETA and delivery timeline." },
     ],
   }),
   component: TrackShipment,
 });
 
+type TrackData = {
+  shipment: any;
+  events: any[];
+  currentHubName: string | null;
+  attempts: any[];
+  exceptions: any[];
+  destinationCoords?: { lat: number; lng: number };
+  originCoords?: { lat: number; lng: number };
+  liveLocation?: any;
+  partner?: any;
+};
+
 function TrackShipment() {
-  const data = Route.useLoaderData();
+  const { id } = useParams({ from: "/customer/track/$id" });
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["customer-track", id],
+    queryFn: async () => {
+      const res = await fetch(`/api/shipments/track/${encodeURIComponent(id)}`);
+      if (!res.ok) throw new Error("not found");
+      return res.json() as Promise<TrackData>;
+    },
+  });
 
   const [liveData, setLiveData] = useState<{
     liveLocation: any;
@@ -100,7 +105,15 @@ function TrackShipment() {
     };
   }, [data?.shipment?.trackingId, data?.shipment?.status]);
 
-  if (!data) {
+  if (isError) {
+    return (
+      <div className="text-sm text-muted-foreground py-10 text-center">
+        Shipment not found. Check the tracking ID and try again.
+      </div>
+    );
+  }
+
+  if (isLoading || !data) {
     return <div className="text-sm text-muted-foreground py-10 text-center">Loading tracking data…</div>;
   }
 
@@ -322,7 +335,7 @@ function TrackShipment() {
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-medium">Attempt #{a.attemptNumber} · <span className="capitalize">{a.outcome.replace(/_/g, " ")}</span></div>
                       {a.reason && <div className="text-xs text-muted-foreground mt-0.5">{a.reason}</div>}
-                      <div className="text-[10px] text-muted-foreground mt-1">{new Date(a.createdAt).toLocaleString()}</div>
+                      <div className="text-[10px] text-muted-foreground mt-1">{new Date(a.attemptedAt ?? a.createdAt).toLocaleString()}</div>
                     </div>
                   </div>
                 ))}

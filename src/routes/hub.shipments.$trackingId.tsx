@@ -1,4 +1,5 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, useParams } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { PriorityBadge } from "@/components/shiplync/PriorityBadge";
 import { ShipmentMilestones } from "@/components/shiplync/ShipmentMilestones";
@@ -8,15 +9,9 @@ import { useAgents, toBadgeStatus } from "@/lib/api-hooks";
 import { ArrowLeft, ShieldCheck, AlertTriangle, Truck, ArrowLeftRight, Warehouse } from "lucide-react";
 
 export const Route = createFileRoute("/hub/shipments/$trackingId")({
-  loader: async ({ params }) => {
-    if (typeof window === "undefined") return null;
-    const res = await fetch(`/api/shipments/track/${encodeURIComponent(params.trackingId)}`);
-    if (!res.ok) throw notFound();
-    return res.json() as Promise<{ shipment: any; events: any[]; currentHubName: string | null; attempts: any[]; exceptions: any[] }>;
-  },
-  head: ({ loaderData }) => ({
+  head: () => ({
     meta: [
-      { title: loaderData?.shipment ? `${loaderData.shipment.trackingId} — Hub Operations` : "Shipment — Hub Operations" },
+      { title: "Shipment — Hub Operations" },
       { name: "description", content: "Hub-side shipment record: status, hub history, priority and exceptions." },
     ],
   }),
@@ -35,10 +30,22 @@ function Fact({ k, v }: { k: string; v: string }) {
 }
 
 function HubShipmentDetail() {
-  const data = Route.useLoaderData();
+  const { trackingId } = useParams({ from: "/hub/shipments/$trackingId" });
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["hub-shipment-detail", trackingId],
+    queryFn: async () => {
+      const res = await fetch(`/api/shipments/track/${encodeURIComponent(trackingId)}`);
+      if (!res.ok) throw new Error("not found");
+      return res.json() as Promise<{ shipment: any; events: any[]; currentHubName: string | null; attempts: any[]; exceptions: any[] }>;
+    },
+  });
   const { data: agents = [] } = useAgents();
 
-  if (!data) {
+  if (isError) {
+    return <div className="text-sm text-muted-foreground py-10 text-center">Shipment not found.</div>;
+  }
+
+  if (isLoading || !data) {
     return <div className="text-sm text-muted-foreground py-10 text-center">Loading shipment record…</div>;
   }
 
