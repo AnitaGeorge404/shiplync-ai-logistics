@@ -6,7 +6,8 @@ import { ShipmentMilestones } from "@/components/shiplync/ShipmentMilestones";
 import { Timeline } from "@/components/shiplync/Timeline";
 import { Barcode } from "@/components/shiplync/Barcode";
 import { useAgents, toBadgeStatus } from "@/lib/api-hooks";
-import { ArrowLeft, ShieldCheck, AlertTriangle, Truck, ArrowLeftRight, Warehouse } from "lucide-react";
+import { ArrowLeft, ShieldCheck, AlertTriangle, Truck, ArrowLeftRight, Warehouse, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/hub/shipments/$trackingId")({
   head: () => ({
@@ -31,18 +32,39 @@ function Fact({ k, v }: { k: string; v: string }) {
 
 function HubShipmentDetail() {
   const { trackingId } = useParams({ from: "/hub/shipments/$trackingId" });
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ["hub-shipment-detail", trackingId],
     queryFn: async () => {
       const res = await fetch(`/api/shipments/track/${encodeURIComponent(trackingId)}`);
-      if (!res.ok) throw new Error("not found");
+      if (!res.ok) {
+        const err = new Error(res.status === 404 ? "not_found" : "request_failed");
+        (err as any).status = res.status;
+        throw err;
+      }
       return res.json() as Promise<{ shipment: any; events: any[]; currentHubName: string | null; attempts: any[]; exceptions: any[] }>;
     },
+    retry: (failureCount, err: any) => err?.status !== 404 && failureCount < 2,
+    retryDelay: 500,
   });
   const { data: agents = [] } = useAgents();
 
   if (isError) {
-    return <div className="text-sm text-muted-foreground py-10 text-center">Shipment not found.</div>;
+    const notFound = (error as any)?.status === 404;
+    return (
+      <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground py-10 text-center">
+        {notFound ? (
+          <p>Shipment not found.</p>
+        ) : (
+          <>
+            <p>Couldn't load this shipment. Check your connection and try again.</p>
+            <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isRefetching}>
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              {isRefetching ? "Retrying…" : "Retry"}
+            </Button>
+          </>
+        )}
+      </div>
+    );
   }
 
   if (isLoading || !data) {

@@ -38,13 +38,22 @@ type TrackData = {
 
 function TrackShipment() {
   const { id } = useParams({ from: "/customer/track/$id" });
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ["customer-track", id],
     queryFn: async () => {
       const res = await fetch(`/api/shipments/track/${encodeURIComponent(id)}`);
-      if (!res.ok) throw new Error("not found");
+      if (!res.ok) {
+        const err = new Error(res.status === 404 ? "not_found" : "request_failed");
+        (err as any).status = res.status;
+        throw err;
+      }
       return res.json() as Promise<TrackData>;
     },
+    // A 404 is a definite answer, not a transient failure — retrying it just
+    // delays the not-found state. Other errors (network blips, 5xx) get a
+    // couple of quick retries before we show the error state.
+    retry: (failureCount, err: any) => err?.status !== 404 && failureCount < 2,
+    retryDelay: 500,
   });
 
   const [liveData, setLiveData] = useState<{
@@ -106,9 +115,20 @@ function TrackShipment() {
   }, [data?.shipment?.trackingId, data?.shipment?.status]);
 
   if (isError) {
+    const notFound = (error as any)?.status === 404;
     return (
-      <div className="text-sm text-muted-foreground py-10 text-center">
-        Shipment not found. Check the tracking ID and try again.
+      <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground py-10 text-center">
+        {notFound ? (
+          <p>Shipment not found. Check the tracking ID and try again.</p>
+        ) : (
+          <>
+            <p>Couldn't load this shipment. Check your connection and try again.</p>
+            <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isRefetching}>
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              {isRefetching ? "Retrying…" : "Retry"}
+            </Button>
+          </>
+        )}
       </div>
     );
   }
