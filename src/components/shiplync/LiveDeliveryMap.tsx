@@ -267,14 +267,14 @@ export function LiveDeliveryMap({
     }
 
     // 2. Origin / Source / Hub Marker
-    const originTitle = isBooked ? "Source / Pickup" : isTransit ? "Logistics Hub" : "Fulfillment Hub";
-    const originIconSvg = isBooked
+    const originTitle = isBooked || isDelivered ? "Source / Pickup" : isTransit ? "Logistics Hub" : "Fulfillment Hub";
+    const originIconSvg = isBooked || isDelivered
       ? `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`
       : `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M3 7v1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7H3l2-4h14l2 4"/><line x1="9" x2="9" y1="21" y2="11"/><line x1="15" x2="15" y1="21" y2="11"/></svg>`;
 
     const originHtml = `
       <div class="relative flex items-center justify-center">
-        <div class="h-8 w-8 rounded-full ${isBooked ? "bg-indigo-600" : "bg-slate-800"} text-white flex items-center justify-center shadow-md border-2 border-white">
+        <div class="h-8 w-8 rounded-full ${isBooked || isDelivered ? "bg-indigo-600" : "bg-slate-800"} text-white flex items-center justify-center shadow-md border-2 border-white">
           ${originIconSvg}
         </div>
         <div class="absolute top-9 whitespace-nowrap bg-background text-muted-foreground text-[9px] font-semibold px-1.5 py-0.5 rounded shadow border border-border">

@@ -541,16 +541,17 @@ export async function handleApiRequest(request: Request): Promise<Response> {
           });
 
       // Coordinate Resolution:
-      // 1. When booked (before scanning at any hub): origin is the sender's location (pickup point).
+      // 1. When booked or delivered/returned: origin is the sender's location (pickup point) showing the whole journey.
       // 2. When in_transit / arrived_hub (scanned at a hub): origin is the scanned hub.
       // 3. When out_for_delivery / delivery_attempted: origin is the local delivery hub / dark store.
       const isBooked = shipment.status === "booked" || shipment.status === "payment_completed";
+      const isDeliveredOrReturned = shipment.status === "delivered" || shipment.status === "returned";
       const isLastMile = shipment.status === "out_for_delivery" || shipment.status === "delivery_attempted";
 
       let hubCoords: { lat: number; lng: number } | null = null;
 
-      if (isBooked) {
-        // Booked: map origin starts strictly at the sender / pickup location
+      if (isBooked || isDeliveredOrReturned) {
+        // Booked or Delivered: map origin starts strictly at the sender / pickup location
         const senderLocation = shipment.senderLat && shipment.senderLng
           ? { lat: shipment.senderLat, lng: shipment.senderLng }
           : resolveLocationCoords({
@@ -701,15 +702,16 @@ export async function handleApiRequest(request: Request): Promise<Response> {
           });
 
       // Coordinate Resolution:
-      // 1. When booked (before scanning at any hub): origin is the sender's location (pickup point).
+      // 1. When booked or delivered/returned: origin is the sender's location (pickup point) showing the full completed journey.
       // 2. When in_transit / arrived_hub (scanned at a hub): origin is the scanned hub.
       // 3. When out_for_delivery / delivery_attempted: origin is the local delivery hub / dark store.
       const isBooked = shipment.status === "booked" || shipment.status === "payment_completed";
+      const isDeliveredOrReturned = shipment.status === "delivered" || shipment.status === "returned";
       const isLastMile = shipment.status === "out_for_delivery" || shipment.status === "delivery_attempted";
 
       let originPointCoords: { lat: number; lng: number } | null = null;
 
-      if (isBooked) {
+      if (isBooked || isDeliveredOrReturned) {
         originPointCoords = shipment.senderLat && shipment.senderLng
           ? { lat: shipment.senderLat, lng: shipment.senderLng }
           : resolveLocationCoords({

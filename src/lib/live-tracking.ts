@@ -7,7 +7,7 @@ export type DriverLocation = {
   agentId?: string;
   lat: number;
   lng: number;
-  speed: number | null; // km/hremove t
+  speed: number | null; // km/h
   heading: number | null; // degrees (0-360)
   accuracy: number | null; // meters
   updatedAt: string; // ISO string
