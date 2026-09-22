@@ -55,6 +55,7 @@ function ShipmentDetailPage() {
     isLoading: boolean;
   };
   const { data: attempts = [] } = useDeliveryAttempts(id);
+  const { data: hubs = [] } = useHubs();
   const queryClient = useQueryClient();
 
   const [busy, setBusy] = useState(false);
@@ -173,7 +174,6 @@ function ShipmentDetailPage() {
     }
   }
 
-  const { data: hubs = [] } = useHubs();
   const currentHub =
     hubs.find((h: any) => h.id === (s as any).currentHubId) ||
     hubs.find(

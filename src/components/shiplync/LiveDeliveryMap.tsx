@@ -303,23 +303,22 @@ export function LiveDeliveryMap({
     if (effectiveRiderLoc && !isDelivered) {
       const heading = effectiveRiderLoc.heading ?? 45;
       const riderHtml = `
-        <div class="relative flex items-center justify-center group">
+        <div class="relative flex items-center justify-center group pointer-events-auto">
           <!-- Radar ping pulse -->
-          <div class="absolute -inset-3 rounded-full bg-primary/25 animate-ping"></div>
-          <div class="absolute -inset-1 rounded-full bg-primary/30"></div>
-          <!-- Scooter circular badge with directional pointer -->
-          <div class="relative h-11 w-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-xl border-2 border-white transform transition-transform duration-300" style="transform: rotate(${heading}deg);">
-            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="18.5" cy="17.5" r="3.5"/>
-              <circle cx="5.5" cy="17.5" r="3.5"/>
-              <circle cx="15" cy="5" r="1"/>
-              <path d="M12 17.5V14l-3-3 4-3 2 3h2"/>
-            </svg>
-            <div class="absolute -top-1 w-2.5 h-2.5 bg-amber-400 rounded-full border border-white shadow-sm"></div>
+          <div class="absolute -inset-3 rounded-full bg-primary/20 animate-ping pointer-events-none"></div>
+          
+          <!-- Top-down Scooter & Driver Illustration with dynamic rotation -->
+          <div class="relative w-14 h-14 flex items-center justify-center transition-transform duration-300 drop-shadow-[0_8px_16px_rgba(0,0,0,0.65)]" style="transform: rotate(${heading}deg);">
+            <img
+              src="/scooter-driver.png"
+              alt="Delivery Driver"
+              class="w-full h-full object-contain pointer-events-none"
+            />
           </div>
+
           <!-- Rider label tag -->
-          <div class="absolute -bottom-6 whitespace-nowrap bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full shadow-md flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <div class="absolute -bottom-6 whitespace-nowrap bg-background/95 border border-border text-foreground text-[10px] font-bold px-2 py-0.5 rounded-full shadow-md flex items-center gap-1 backdrop-blur-sm">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>${partner?.name || "Delivery Partner"}</span>
           </div>
         </div>
@@ -328,8 +327,8 @@ export function LiveDeliveryMap({
       const riderIcon = L.divIcon({
         className: "custom-rider-marker",
         html: riderHtml,
-        iconSize: [44, 44],
-        iconAnchor: [22, 22],
+        iconSize: [48, 48],
+        iconAnchor: [24, 24],
       });
 
       if (!riderMarkerRef.current) {
