@@ -79,9 +79,10 @@ export function LiveDeliveryMap({
   const currentTileLayerRef = useRef<any>(null);
 
   const isDelivered = status === "delivered";
-  const isDelivering = status === "out_for_delivery" || status === "picked_up";
-  const isBooked = status === "booked" || status === "payment_completed";
-  const isTransit = status === "in_transit" || status === "arrived_hub";
+  const hasLiveRider = !isDelivered && !!driverLocation;
+  const isDelivering = status === "out_for_delivery" || status === "picked_up" || hasLiveRider;
+  const isBooked = (status === "booked" || status === "payment_completed") && !hasLiveRider;
+  const isTransit = (status === "in_transit" || status === "arrived_hub") && !hasLiveRider;
 
   // Counter for "updated X seconds ago"
   useEffect(() => {
@@ -110,16 +111,16 @@ export function LiveDeliveryMap({
     if (isDelivered) return null;
     if (driverLocation) return driverLocation;
     if (isDelivering) {
-      // Fallback rider position ~70% along route from origin to destination
+      // Before driver starts GPS / movement, rider is placed right at the origin hub (progress 0.0)
       return {
-        lat: effectiveOrigin.lat + (destinationCoords.lat - effectiveOrigin.lat) * 0.7,
-        lng: effectiveOrigin.lng + (destinationCoords.lng - effectiveOrigin.lng) * 0.7,
-        speed: 24,
+        lat: effectiveOrigin.lat,
+        lng: effectiveOrigin.lng,
+        speed: 0,
         heading: 45,
       };
     }
     return null;
-  }, [driverLocation, isDelivering, isDelivered, effectiveOrigin, destinationCoords]);
+  }, [driverLocation, isDelivering, isDelivered, effectiveOrigin]);
 
   // Initialize Leaflet client-side
   useEffect(() => {
@@ -262,14 +263,19 @@ export function LiveDeliveryMap({
       destMarkerRef.current.setIcon(destIcon);
     }
 
-    // 2. Origin / Hub Marker
+    // 2. Origin / Source / Hub Marker
+    const originTitle = isBooked ? "Source / Pickup" : isTransit ? "Logistics Hub" : "Fulfillment Hub";
+    const originIconSvg = isBooked
+      ? `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`
+      : `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M3 7v1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7H3l2-4h14l2 4"/><line x1="9" x2="9" y1="21" y2="11"/><line x1="15" x2="15" y1="21" y2="11"/></svg>`;
+
     const originHtml = `
       <div class="relative flex items-center justify-center">
-        <div class="h-8 w-8 rounded-full bg-slate-800 text-white flex items-center justify-center shadow-md border-2 border-white">
-          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M3 7v1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7H3l2-4h14l2 4"/><line x1="9" x2="9" y1="21" y2="11"/><line x1="15" x2="15" y1="21" y2="11"/></svg>
+        <div class="h-8 w-8 rounded-full ${isBooked ? "bg-indigo-600" : "bg-slate-800"} text-white flex items-center justify-center shadow-md border-2 border-white">
+          ${originIconSvg}
         </div>
-        <div class="absolute top-9 whitespace-nowrap bg-background text-muted-foreground text-[9px] font-medium px-1.5 py-0.2 rounded shadow border border-border">
-          Fulfillment Hub
+        <div class="absolute top-9 whitespace-nowrap bg-background text-muted-foreground text-[9px] font-semibold px-1.5 py-0.5 rounded shadow border border-border">
+          ${originTitle}
         </div>
       </div>
     `;
@@ -287,6 +293,7 @@ export function LiveDeliveryMap({
       }).addTo(map);
     } else {
       originMarkerRef.current.setLatLng([effectiveOrigin.lat, effectiveOrigin.lng]);
+      originMarkerRef.current.setIcon(originIcon);
     }
 
     // 3. Rider Marker (Delivery Partner Scooter/Bike) — visible during active delivery
@@ -339,7 +346,7 @@ export function LiveDeliveryMap({
 
     // 4. Road Route Polyline (OSRM)
     let isSubscribed = true;
-    const startPoint = isDelivering && effectiveRiderLoc ? effectiveRiderLoc : effectiveOrigin;
+    const startPoint = effectiveRiderLoc ? effectiveRiderLoc : effectiveOrigin;
 
     async function fetchRoadRoute() {
       const url = `https://router.project-osrm.org/route/v1/driving/${startPoint.lng},${startPoint.lat};${destinationCoords.lng},${destinationCoords.lat}?overview=full&geometries=geojson`;
@@ -428,7 +435,7 @@ export function LiveDeliveryMap({
     if (!mapInstanceRef.current || !LRef.current) return;
     setViewMode("fit");
     const L = LRef.current;
-    const startPoint = isDelivering && effectiveRiderLoc ? effectiveRiderLoc : effectiveOrigin;
+    const startPoint = effectiveRiderLoc ? effectiveRiderLoc : effectiveOrigin;
     const bounds = L.latLngBounds([
       [destinationCoords.lat, destinationCoords.lng],
       [startPoint.lat, startPoint.lng],
@@ -448,8 +455,26 @@ export function LiveDeliveryMap({
     mapInstanceRef.current.flyTo([destinationCoords.lat, destinationCoords.lng], 16, { duration: 1 });
   }
 
-  const displayEta = routeInfo ? `${routeInfo.durationMinutes} mins` : "8-12 mins";
-  const displayDist = routeInfo ? `${routeInfo.distanceKm} km` : "2.2 km";
+  // Check if driver has reached destination (< 80 meters away or speed=0 right at dest)
+  const isDriverArrived = React.useMemo(() => {
+    if (!effectiveRiderLoc || isDelivered) return false;
+    const dLat = Math.abs(effectiveRiderLoc.lat - destinationCoords.lat);
+    const dLng = Math.abs(effectiveRiderLoc.lng - destinationCoords.lng);
+    return dLat < 0.0009 && dLng < 0.0009;
+  }, [effectiveRiderLoc?.lat, effectiveRiderLoc?.lng, destinationCoords.lat, destinationCoords.lng, isDelivered]);
+
+  const displayEta = isDriverArrived
+    ? "Arrived"
+    : routeInfo
+      ? routeInfo.durationMinutes <= 1
+        ? "Arriving now"
+        : `${routeInfo.durationMinutes} mins`
+      : "8-12 mins";
+  const displayDist = isDriverArrived
+    ? "0 m"
+    : routeInfo
+      ? `${routeInfo.distanceKm} km`
+      : "2.2 km";
 
   return (
     <div className={`relative overflow-hidden rounded-2xl border bg-card shadow-lg ${className ?? "h-96 sm:h-[450px]"}`}>
@@ -466,6 +491,13 @@ export function LiveDeliveryMap({
                   <span className="relative flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
                   <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                     Delivered Successfully
+                  </span>
+                </>
+              ) : isDriverArrived ? (
+                <>
+                  <span className="relative flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    Reached Your Destination
                   </span>
                 </>
               ) : isDelivering ? (
@@ -493,11 +525,13 @@ export function LiveDeliveryMap({
               <span>
                 {isDelivered
                   ? "Completed"
-                  : isDelivering
-                    ? lastSeenSeconds < 5
-                      ? "Live now"
-                      : `${lastSeenSeconds}s ago`
-                    : "On schedule"}
+                  : isDriverArrived
+                    ? "At doorstep"
+                    : isDelivering
+                      ? lastSeenSeconds < 5
+                        ? "Live now"
+                        : `${lastSeenSeconds}s ago`
+                      : "On schedule"}
               </span>
             </div>
           </div>
@@ -514,11 +548,21 @@ export function LiveDeliveryMap({
                     Delivered to {destinationAddress || "recipient address"}
                   </p>
                 </>
+              ) : isDriverArrived ? (
+                <>
+                  <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                    <CheckCircle2 className="h-6 w-6 shrink-0" />
+                    <span>Reached your destination</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                    {partner?.name ? `${partner.name} has arrived at your address` : "Delivery partner has arrived at your address"}
+                  </p>
+                </>
               ) : isDelivering ? (
                 <>
                   <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-foreground flex items-center gap-1.5">
                     <span>{displayEta}</span>
-                    <span className="text-xs font-normal text-muted-foreground">away</span>
+                    <span className="text-xs font-normal text-muted-foreground">{displayEta === "Arriving now" ? "" : "away"}</span>
                   </div>
                   <p className="text-xs text-muted-foreground font-medium mt-0.5">
                     {partner?.name ? `${partner.name} is on the way` : "Delivery partner on route"} · {displayDist}

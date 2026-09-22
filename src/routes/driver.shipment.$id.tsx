@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useShipments, useDeliveryAttempts, useQueryClient } from "@/lib/api-hooks";
+import { useShipments, useDeliveryAttempts, useQueryClient, useHubs } from "@/lib/api-hooks";
 import {
   NEXT_STATUS,
+  TERMINAL_STATUSES,
   canRecordAttempt,
   fullAddress,
   mapsHref,
@@ -172,9 +173,19 @@ function ShipmentDetailPage() {
     }
   }
 
-  const next = NEXT_STATUS[s.status];
+  const { data: hubs = [] } = useHubs();
+  const currentHub =
+    hubs.find((h: any) => h.id === (s as any).currentHubId) ||
+    hubs.find(
+      (h: any) =>
+        (s as any).currentLocationCity &&
+        h.city.toLowerCase() === (s as any).currentLocationCity.toLowerCase(),
+    ) ||
+    null;
+
+  const next = NEXT_STATUS[s.status] ?? null;
   const canAttempt = canRecordAttempt(s.status);
-  const isTerminal = !next && !canAttempt;
+  const isTerminal = TERMINAL_STATUSES.has(s.status);
 
   return (
     <div className="space-y-5 pb-4">
@@ -203,6 +214,17 @@ function ShipmentDetailPage() {
           lat: (s as any).receiverLat ?? null,
           lng: (s as any).receiverLng ?? null,
         }}
+        currentHub={
+          currentHub
+            ? {
+                name: currentHub.name,
+                city: currentHub.city,
+                lat: currentHub.lat,
+                lng: currentHub.lng,
+              }
+            : null
+        }
+        currentLocationCity={(s as any).currentLocationCity}
         senderAddress={{
           addressLine: (s as any).senderAddressLine ?? "",
           city: (s as any).senderCity ?? s.receiverCity,
