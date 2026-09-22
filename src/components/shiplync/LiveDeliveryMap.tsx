@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   PackageCheck,
   Store,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -76,6 +78,7 @@ export function LiveDeliveryMap({
   const [lastSeenSeconds, setLastSeenSeconds] = useState(0);
   const [viewMode, setViewMode] = useState<"fit" | "rider" | "dest">("fit");
   const [tileStyle, setTileStyle] = useState<"osm" | "voyager" | "satellite">("osm");
+  const [isBannerCollapsed, setIsBannerCollapsed] = useState(false);
   const currentTileLayerRef = useRef<any>(null);
 
   const isDelivered = status === "delivered";
@@ -405,13 +408,17 @@ export function LiveDeliveryMap({
 
     fetchRoadRoute();
 
-    // Auto-fit bounds on initial load
+    // Auto-fit bounds on initial load with generous top padding so banner doesn't obstruct route
     if (viewMode === "fit") {
       const bounds = L.latLngBounds([
         [destinationCoords.lat, destinationCoords.lng],
         [startPoint.lat, startPoint.lng],
       ]);
-      map.fitBounds(bounds, { padding: [70, 70], maxZoom: 16 });
+      map.fitBounds(bounds, {
+        paddingTopLeft: [70, 160], // Extra top padding to ensure rider/hub is never hidden under the top-left status banner
+        paddingBottomRight: [70, 70],
+        maxZoom: 16,
+      });
     }
 
     return () => {
@@ -440,7 +447,11 @@ export function LiveDeliveryMap({
       [destinationCoords.lat, destinationCoords.lng],
       [startPoint.lat, startPoint.lng],
     ]);
-    mapInstanceRef.current.fitBounds(bounds, { padding: [70, 70], maxZoom: 16 });
+    mapInstanceRef.current.fitBounds(bounds, {
+      paddingTopLeft: [70, 160],
+      paddingBottomRight: [70, 70],
+      maxZoom: 16,
+    });
   }
 
   function handleFocusRider() {
@@ -482,8 +493,8 @@ export function LiveDeliveryMap({
       <div ref={mapContainerRef} className="w-full h-full z-0 bg-muted/20" />
 
       {/* Floating Status Banner */}
-      <div className="absolute top-3 left-3 right-3 sm:right-auto z-10 flex flex-col gap-2 max-w-sm pointer-events-none">
-        <div className="bg-background/95 backdrop-blur-md border border-border/80 rounded-xl p-3.5 shadow-lg pointer-events-auto space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+      <div className="absolute top-3 left-3 z-10 flex flex-col gap-2 max-w-sm pointer-events-none">
+        <div className="bg-background/95 backdrop-blur-md border border-border/80 rounded-xl p-3 sm:p-3.5 shadow-lg pointer-events-auto space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               {isDelivered ? (
@@ -520,77 +531,89 @@ export function LiveDeliveryMap({
               )}
             </div>
 
-            <div className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
-              <Clock className="h-3 w-3" />
-              <span>
-                {isDelivered
-                  ? "Completed"
-                  : isDriverArrived
-                    ? "At doorstep"
-                    : isDelivering
-                      ? lastSeenSeconds < 5
-                        ? "Live now"
-                        : `${lastSeenSeconds}s ago`
-                      : "On schedule"}
-              </span>
+            <div className="flex items-center gap-2">
+              <div className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
+                <Clock className="h-3 w-3" />
+                <span>
+                  {isDelivered
+                    ? "Completed"
+                    : isDriverArrived
+                      ? "At doorstep"
+                      : isDelivering
+                        ? lastSeenSeconds < 5
+                          ? "Live now"
+                          : `${lastSeenSeconds}s ago`
+                        : "On schedule"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBannerCollapsed((prev) => !prev)}
+                className="h-5 w-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                title={isBannerCollapsed ? "Expand card" : "Minimize card"}
+              >
+                {isBannerCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+              </button>
             </div>
           </div>
 
-          <div className="flex items-baseline justify-between gap-3 pt-0.5">
-            <div>
-              {isDelivered ? (
-                <>
-                  <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                    <CheckCircle2 className="h-6 w-6 shrink-0" />
-                    <span>Package Delivered</span>
+          {!isBannerCollapsed && (
+            <div className="flex items-baseline justify-between gap-3 pt-0.5 animate-in fade-in duration-200">
+              <div>
+                {isDelivered ? (
+                  <>
+                    <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-6 w-6 shrink-0" />
+                      <span>Package Delivered</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                      Delivered to {destinationAddress || "recipient address"}
+                    </p>
+                  </>
+                ) : isDriverArrived ? (
+                  <>
+                    <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-6 w-6 shrink-0" />
+                      <span>Reached your destination</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                      {partner?.name ? `${partner.name} has arrived at your address` : "Delivery partner has arrived at your address"}
+                    </p>
+                  </>
+                ) : isDelivering ? (
+                  <>
+                    <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-foreground flex items-center gap-1.5">
+                      <span>{displayEta}</span>
+                      <span className="text-xs font-normal text-muted-foreground">{displayEta === "Arriving now" ? "" : "away"}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                      {partner?.name ? `${partner.name} is on the way` : "Delivery partner on route"} · {displayDist}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-foreground">
+                      {isTransit ? "In Transit to Hub" : "Order Placed"}
+                    </div>
+                    <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                      {isTransit ? "Dispatched on logistics corridor" : "Preparing package for pickup"} · {displayDist}
+                    </p>
+                  </>
+                )}
+              </div>
+
+              {deliveryOtp && (
+                <div className="text-right shrink-0 bg-primary/10 border border-primary/25 rounded-lg px-2.5 py-1">
+                  <div className="text-[9px] uppercase font-semibold text-primary">
+                    {isDelivered ? "OTP Status" : "Delivery OTP"}
                   </div>
-                  <p className="text-xs text-muted-foreground font-medium mt-0.5">
-                    Delivered to {destinationAddress || "recipient address"}
-                  </p>
-                </>
-              ) : isDriverArrived ? (
-                <>
-                  <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                    <CheckCircle2 className="h-6 w-6 shrink-0" />
-                    <span>Reached your destination</span>
+                  <div className="font-mono text-base font-bold tracking-widest text-primary">
+                    {isDelivered ? "VERIFIED" : deliveryOtp}
                   </div>
-                  <p className="text-xs text-muted-foreground font-medium mt-0.5">
-                    {partner?.name ? `${partner.name} has arrived at your address` : "Delivery partner has arrived at your address"}
-                  </p>
-                </>
-              ) : isDelivering ? (
-                <>
-                  <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-foreground flex items-center gap-1.5">
-                    <span>{displayEta}</span>
-                    <span className="text-xs font-normal text-muted-foreground">{displayEta === "Arriving now" ? "" : "away"}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground font-medium mt-0.5">
-                    {partner?.name ? `${partner.name} is on the way` : "Delivery partner on route"} · {displayDist}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-foreground">
-                    {isTransit ? "In Transit to Hub" : "Order Placed"}
-                  </div>
-                  <p className="text-xs text-muted-foreground font-medium mt-0.5">
-                    {isTransit ? "Dispatched on logistics corridor" : "Preparing package for pickup"} · {displayDist}
-                  </p>
-                </>
+                </div>
               )}
             </div>
-
-            {deliveryOtp && (
-              <div className="text-right shrink-0 bg-primary/10 border border-primary/25 rounded-lg px-2.5 py-1">
-                <div className="text-[9px] uppercase font-semibold text-primary">
-                  {isDelivered ? "OTP Status" : "Delivery OTP"}
-                </div>
-                <div className="font-mono text-base font-bold tracking-widest text-primary">
-                  {isDelivered ? "VERIFIED" : deliveryOtp}
-                </div>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
