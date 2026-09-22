@@ -224,6 +224,70 @@ export function DriverLiveTracker({
     };
   }, [gpsActive, isSimulating, shipmentId, trackingId]);
 
+  // Fetch and cache road route waypoints from OSRM
+  const [routeWaypoints, setRouteWaypoints] = useState<[number, number][]>([]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    async function fetchWaypoints() {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${startCoords.lng},${startCoords.lat};${destCoords.lng},${destCoords.lat}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (!isCancelled && data.routes && data.routes[0]?.geometry?.coordinates) {
+            // Convert [lng, lat] coordinates into [lat, lng]
+            const points: [number, number][] = data.routes[0].geometry.coordinates.map(
+              (c: [number, number]) => [c[1], c[0]]
+            );
+            if (points.length > 1) {
+              setRouteWaypoints(points);
+            }
+          }
+        }
+      } catch {
+        // Fallback to straight-line interpolation if OSRM is unreachable
+      }
+    }
+    fetchWaypoints();
+    return () => {
+      isCancelled = true;
+    };
+  }, [startCoords.lat, startCoords.lng, destCoords.lat, destCoords.lng]);
+
+  // Helper to get point along multi-segment polyline path given progress 0.0 -> 1.0
+  function getPositionAlongRoute(progress: number): { lat: number; lng: number; heading: number } {
+    const clamped = Math.max(0, Math.min(1, progress));
+    if (routeWaypoints.length < 2) {
+      const lat = startCoords.lat + (destCoords.lat - startCoords.lat) * clamped;
+      const lng = startCoords.lng + (destCoords.lng - startCoords.lng) * clamped;
+      const dLng = destCoords.lng - lng;
+      const dLat = destCoords.lat - lat;
+      let angle = (Math.atan2(dLng, dLat) * 180) / Math.PI;
+      if (angle < 0) angle += 360;
+      return { lat, lng, heading: Math.round(angle) };
+    }
+
+    // Calculate total segments and distances
+    const totalSegments = routeWaypoints.length - 1;
+    const targetIdx = clamped * totalSegments;
+    const segIndex = Math.min(Math.floor(targetIdx), totalSegments - 1);
+    const segFraction = targetIdx - segIndex;
+
+    const p1 = routeWaypoints[segIndex];
+    const p2 = routeWaypoints[segIndex + 1];
+
+    const lat = p1[0] + (p2[0] - p1[0]) * segFraction;
+    const lng = p1[1] + (p2[1] - p1[1]) * segFraction;
+
+    const dLng = p2[1] - p1[1];
+    const dLat = p2[0] - p1[0];
+    let angle = (Math.atan2(dLng, dLat) * 180) / Math.PI;
+    if (angle < 0) angle += 360;
+
+    return { lat, lng, heading: Math.round(angle) };
+  }
+
   // 2. Simulation Movement Loop (Instant testing for evaluators)
   useEffect(() => {
     if (!isSimulating) {
@@ -247,21 +311,12 @@ export function DriverLiveTracker({
           return 1;
         }
 
-        // Compute simulated position between start and dest with slight curve
-        const p = next;
-        const lat = startCoords.lat + (destCoords.lat - startCoords.lat) * p + Math.sin(p * Math.PI) * 0.002;
-        const lng = startCoords.lng + (destCoords.lng - startCoords.lng) * p + Math.cos(p * Math.PI) * 0.002;
-
-        // Compute heading
-        const dLng = destCoords.lng - lng;
-        const dLat = destCoords.lat - lat;
-        let angle = (Math.atan2(dLng, dLat) * 180) / Math.PI;
-        if (angle < 0) angle += 360;
-        const heading = Math.round(angle);
+        // Compute exact position along real road route polyline
+        const pos = getPositionAlongRoute(next);
         const speed = Math.round(28 * simSpeedMultiplier);
 
-        setCoords({ lat, lng });
-        broadcastLocation({ lat, lng, speed, heading, accuracy: 5 });
+        setCoords({ lat: pos.lat, lng: pos.lng });
+        broadcastLocation({ lat: pos.lat, lng: pos.lng, speed, heading: pos.heading, accuracy: 5 });
 
         return next;
       });
@@ -270,25 +325,19 @@ export function DriverLiveTracker({
     return () => {
       if (simIntervalRef.current) clearInterval(simIntervalRef.current);
     };
-  }, [isSimulating, simSpeedMultiplier, startCoords.lat, startCoords.lng, destCoords.lat, destCoords.lng]);
+  }, [isSimulating, simSpeedMultiplier, startCoords.lat, startCoords.lng, destCoords.lat, destCoords.lng, routeWaypoints]);
 
   function startSimulation() {
     setIsSimulating(true);
     setGpsActive(false);
 
-    // Immediately calculate and broadcast the first location point with no delay
+    // Immediately calculate and broadcast the first location point along the road
     const p = simProgress;
-    const lat = startCoords.lat + (destCoords.lat - startCoords.lat) * p + Math.sin(p * Math.PI) * 0.002;
-    const lng = startCoords.lng + (destCoords.lng - startCoords.lng) * p + Math.cos(p * Math.PI) * 0.002;
-    const dLng = destCoords.lng - lng;
-    const dLat = destCoords.lat - lat;
-    let angle = (Math.atan2(dLng, dLat) * 180) / Math.PI;
-    if (angle < 0) angle += 360;
-    const heading = Math.round(angle);
+    const pos = getPositionAlongRoute(p);
     const speed = Math.round(28 * simSpeedMultiplier);
 
-    setCoords({ lat, lng });
-    broadcastLocation({ lat, lng, speed, heading, accuracy: 5 });
+    setCoords({ lat: pos.lat, lng: pos.lng });
+    broadcastLocation({ lat: pos.lat, lng: pos.lng, speed, heading: pos.heading, accuracy: 5 });
 
     toast.info("Live ride simulation started. Open customer tracking to watch in real-time!");
   }
@@ -321,7 +370,7 @@ export function DriverLiveTracker({
           <div>
             <h3 className="font-display font-semibold text-sm">Live Location Broadcasting</h3>
             <p className="text-[11px] text-muted-foreground">
-              Customer sees your live GPS on their map in real time (Instamart / Blinkit)
+              Customer sees your live GPS on their map in real time
             </p>
           </div>
         </div>
