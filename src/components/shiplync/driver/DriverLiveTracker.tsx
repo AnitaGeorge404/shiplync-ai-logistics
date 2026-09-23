@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { resolveLocationCoords } from "@/lib/distance";
+import { getNearestMajorLogisticsCity } from "@/lib/logistics-city";
 
 interface DriverLiveTrackerProps {
   shipmentId: string;
@@ -30,6 +31,13 @@ interface DriverLiveTrackerProps {
     lat?: number | null;
     lng?: number | null;
   };
+  currentHub?: {
+    name?: string;
+    city?: string;
+    lat?: number | null;
+    lng?: number | null;
+  } | null;
+  currentLocationCity?: string | null;
   senderAddress?: {
     addressLine: string;
     city: string;
@@ -45,12 +53,13 @@ export function DriverLiveTracker({
   shipmentId,
   trackingId,
   receiverAddress,
+  currentHub,
+  currentLocationCity,
   senderAddress,
   status,
 }: DriverLiveTrackerProps) {
-  const [gpsActive, setGpsActive] = useState(true);
+  const [gpsActive, setGpsActive] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [telemetry, setTelemetry] = useState<{
     speed: number | null;
     heading: number | null;
@@ -65,11 +74,11 @@ export function DriverLiveTracker({
 
   // Simulation state
   const [isSimulating, setIsSimulating] = useState(false);
-  const [simProgress, setSimProgress] = useState(0.35); // 0 to 1
+  const [simProgress, setSimProgress] = useState(0.0); // Start from the current hub (0% of route)
   const [simSpeedMultiplier, setSimSpeedMultiplier] = useState<1 | 2 | 5>(1);
   const simIntervalRef = useRef<any>(null);
 
-  // Resolve target coordinates
+  // Resolve target coordinates (Customer Delivery Address)
   const destCoords =
     receiverAddress.lat && receiverAddress.lng
       ? { lat: receiverAddress.lat, lng: receiverAddress.lng }
@@ -80,17 +89,54 @@ export function DriverLiveTracker({
           addressLine: receiverAddress.addressLine,
         });
 
-  const startCoords =
-    senderAddress?.lat && senderAddress?.lng
-      ? { lat: senderAddress.lat, lng: senderAddress.lng }
-      : resolveLocationCoords({
-          city: senderAddress?.city || receiverAddress.city,
-          state: senderAddress?.state || receiverAddress.state,
-          pincode: senderAddress?.pincode || receiverAddress.pincode,
-          addressLine: senderAddress?.addressLine,
+  // Resolve start coordinates: Delivery driver starts strictly from the local fulfillment hub/store for this delivery
+  const startCoords = React.useMemo(() => {
+    const isLastMile = status === "out_for_delivery" || status === "delivery_attempted";
+
+    if (!isLastMile && currentHub?.lat && currentHub?.lng) {
+      const dLat = Math.abs(currentHub.lat - destCoords.lat);
+      const dLng = Math.abs(currentHub.lng - destCoords.lng);
+      if (dLat < 0.008 && dLng < 0.008) {
+        return { lat: destCoords.lat + 0.014, lng: destCoords.lng - 0.014 };
+      }
+      return { lat: currentHub.lat, lng: currentHub.lng };
+    }
+
+    const hubCity = isLastMile
+      ? receiverAddress.city
+      : currentLocationCity ||
+        getNearestMajorLogisticsCity({
+          city: receiverAddress.city,
+          state: receiverAddress.state,
+          pincode: receiverAddress.pincode,
         });
 
-  // Broadcast location to API
+    const rawHubCoords = resolveLocationCoords({
+      city: hubCity,
+      state: receiverAddress.state,
+      pincode: receiverAddress.pincode,
+      addressLine: isLastMile ? receiverAddress.addressLine : undefined,
+    });
+
+    const dLat = Math.abs(rawHubCoords.lat - destCoords.lat);
+    const dLng = Math.abs(rawHubCoords.lng - destCoords.lng);
+    // If hub and destination are within ~5km (same locality/town), place the local delivery fulfillment store ~1.8km Northwest
+    if (dLat < 0.008 && dLng < 0.008) {
+      return { lat: destCoords.lat + 0.014, lng: destCoords.lng - 0.014 };
+    }
+    return rawHubCoords;
+  }, [status, currentHub?.lat, currentHub?.lng, currentLocationCity, receiverAddress.city, receiverAddress.state, receiverAddress.pincode, receiverAddress.addressLine, destCoords.lat, destCoords.lng]);
+
+  const [coords, setCoords] = useState<{ lat: number; lng: number }>(startCoords);
+
+  // Update initial coords whenever startCoords resolves
+  useEffect(() => {
+    if (!isSimulating && !gpsActive) {
+      setCoords(startCoords);
+    }
+  }, [startCoords.lat, startCoords.lng, isSimulating, gpsActive]);
+
+  // Broadcast location to API and cross-tab BroadcastChannel
   async function broadcastLocation(payload: {
     lat: number;
     lng: number;
@@ -98,6 +144,25 @@ export function DriverLiveTracker({
     heading?: number | null;
     accuracy?: number | null;
   }) {
+    // 1. Instant cross-tab sync so customer tracking map responds with 0ms latency
+    try {
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        const bc = new BroadcastChannel("shiplync_driver_tracking");
+        bc.postMessage({
+          type: "DRIVER_LOCATION_UPDATE",
+          shipmentId,
+          trackingId,
+          ...payload,
+          status: "out_for_delivery",
+          timestamp: Date.now(),
+        });
+        bc.close();
+      }
+    } catch {
+      // Ignore broadcast channel errors
+    }
+
+    // 2. Persist to API
     try {
       const res = await fetch("/api/driver/location", {
         method: "POST",
@@ -159,6 +224,70 @@ export function DriverLiveTracker({
     };
   }, [gpsActive, isSimulating, shipmentId, trackingId]);
 
+  // Fetch and cache road route waypoints from OSRM
+  const [routeWaypoints, setRouteWaypoints] = useState<[number, number][]>([]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    async function fetchWaypoints() {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${startCoords.lng},${startCoords.lat};${destCoords.lng},${destCoords.lat}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (!isCancelled && data.routes && data.routes[0]?.geometry?.coordinates) {
+            // Convert [lng, lat] coordinates into [lat, lng]
+            const points: [number, number][] = data.routes[0].geometry.coordinates.map(
+              (c: [number, number]) => [c[1], c[0]]
+            );
+            if (points.length > 1) {
+              setRouteWaypoints(points);
+            }
+          }
+        }
+      } catch {
+        // Fallback to straight-line interpolation if OSRM is unreachable
+      }
+    }
+    fetchWaypoints();
+    return () => {
+      isCancelled = true;
+    };
+  }, [startCoords.lat, startCoords.lng, destCoords.lat, destCoords.lng]);
+
+  // Helper to get point along multi-segment polyline path given progress 0.0 -> 1.0
+  function getPositionAlongRoute(progress: number): { lat: number; lng: number; heading: number } {
+    const clamped = Math.max(0, Math.min(1, progress));
+    if (routeWaypoints.length < 2) {
+      const lat = startCoords.lat + (destCoords.lat - startCoords.lat) * clamped;
+      const lng = startCoords.lng + (destCoords.lng - startCoords.lng) * clamped;
+      const dLng = destCoords.lng - lng;
+      const dLat = destCoords.lat - lat;
+      let angle = (Math.atan2(dLng, dLat) * 180) / Math.PI;
+      if (angle < 0) angle += 360;
+      return { lat, lng, heading: Math.round(angle) };
+    }
+
+    // Calculate total segments and distances
+    const totalSegments = routeWaypoints.length - 1;
+    const targetIdx = clamped * totalSegments;
+    const segIndex = Math.min(Math.floor(targetIdx), totalSegments - 1);
+    const segFraction = targetIdx - segIndex;
+
+    const p1 = routeWaypoints[segIndex];
+    const p2 = routeWaypoints[segIndex + 1];
+
+    const lat = p1[0] + (p2[0] - p1[0]) * segFraction;
+    const lng = p1[1] + (p2[1] - p1[1]) * segFraction;
+
+    const dLng = p2[1] - p1[1];
+    const dLat = p2[0] - p1[0];
+    let angle = (Math.atan2(dLng, dLat) * 180) / Math.PI;
+    if (angle < 0) angle += 360;
+
+    return { lat, lng, heading: Math.round(angle) };
+  }
+
   // 2. Simulation Movement Loop (Instant testing for evaluators)
   useEffect(() => {
     if (!isSimulating) {
@@ -174,25 +303,20 @@ export function DriverLiveTracker({
         if (next >= 1) {
           // Reached destination
           setIsSimulating(false);
+          const lat = destCoords.lat;
+          const lng = destCoords.lng;
+          setCoords({ lat, lng });
+          broadcastLocation({ lat, lng, speed: 0, heading: 0, accuracy: 3 });
           toast.success("Simulation reached customer delivery address!");
           return 1;
         }
 
-        // Compute simulated position between start and dest with slight curve
-        const p = next;
-        const lat = startCoords.lat + (destCoords.lat - startCoords.lat) * p + Math.sin(p * Math.PI) * 0.002;
-        const lng = startCoords.lng + (destCoords.lng - startCoords.lng) * p + Math.cos(p * Math.PI) * 0.002;
-
-        // Compute heading
-        const dLng = destCoords.lng - lng;
-        const dLat = destCoords.lat - lat;
-        let angle = (Math.atan2(dLng, dLat) * 180) / Math.PI;
-        if (angle < 0) angle += 360;
-        const heading = Math.round(angle);
+        // Compute exact position along real road route polyline
+        const pos = getPositionAlongRoute(next);
         const speed = Math.round(28 * simSpeedMultiplier);
 
-        setCoords({ lat, lng });
-        broadcastLocation({ lat, lng, speed, heading, accuracy: 5 });
+        setCoords({ lat: pos.lat, lng: pos.lng });
+        broadcastLocation({ lat: pos.lat, lng: pos.lng, speed, heading: pos.heading, accuracy: 5 });
 
         return next;
       });
@@ -201,11 +325,20 @@ export function DriverLiveTracker({
     return () => {
       if (simIntervalRef.current) clearInterval(simIntervalRef.current);
     };
-  }, [isSimulating, simSpeedMultiplier, startCoords.lat, startCoords.lng, destCoords.lat, destCoords.lng]);
+  }, [isSimulating, simSpeedMultiplier, startCoords.lat, startCoords.lng, destCoords.lat, destCoords.lng, routeWaypoints]);
 
   function startSimulation() {
     setIsSimulating(true);
     setGpsActive(false);
+
+    // Immediately calculate and broadcast the first location point along the road
+    const p = simProgress;
+    const pos = getPositionAlongRoute(p);
+    const speed = Math.round(28 * simSpeedMultiplier);
+
+    setCoords({ lat: pos.lat, lng: pos.lng });
+    broadcastLocation({ lat: pos.lat, lng: pos.lng, speed, heading: pos.heading, accuracy: 5 });
+
     toast.info("Live ride simulation started. Open customer tracking to watch in real-time!");
   }
 
@@ -215,13 +348,12 @@ export function DriverLiveTracker({
 
   function resetSimulation() {
     setIsSimulating(false);
-    setSimProgress(0.15);
-    const p = 0.15;
-    const lat = startCoords.lat + (destCoords.lat - startCoords.lat) * p;
-    const lng = startCoords.lng + (destCoords.lng - startCoords.lng) * p;
+    setSimProgress(0.0);
+    const lat = startCoords.lat;
+    const lng = startCoords.lng;
     setCoords({ lat, lng });
     broadcastLocation({ lat, lng, speed: 0, heading: 45, accuracy: 5 });
-    toast.success("Simulation reset to start of route.");
+    toast.success("Simulation reset to current hub.");
   }
 
   const isLive = !!coords || isSimulating;
@@ -238,7 +370,7 @@ export function DriverLiveTracker({
           <div>
             <h3 className="font-display font-semibold text-sm">Live Location Broadcasting</h3>
             <p className="text-[11px] text-muted-foreground">
-              Customer sees your live GPS on their map in real time (Instamart / Blinkit)
+              Customer sees your live GPS on their map in real time
             </p>
           </div>
         </div>

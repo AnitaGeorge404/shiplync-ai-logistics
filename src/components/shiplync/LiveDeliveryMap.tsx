@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   PackageCheck,
   Store,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -76,12 +78,14 @@ export function LiveDeliveryMap({
   const [lastSeenSeconds, setLastSeenSeconds] = useState(0);
   const [viewMode, setViewMode] = useState<"fit" | "rider" | "dest">("fit");
   const [tileStyle, setTileStyle] = useState<"osm" | "voyager" | "satellite">("osm");
+  const [isBannerCollapsed, setIsBannerCollapsed] = useState(false);
   const currentTileLayerRef = useRef<any>(null);
 
   const isDelivered = status === "delivered";
-  const isDelivering = status === "out_for_delivery" || status === "picked_up";
-  const isBooked = status === "booked" || status === "payment_completed";
-  const isTransit = status === "in_transit" || status === "arrived_hub";
+  const hasLiveRider = !isDelivered && !!driverLocation;
+  const isDelivering = status === "out_for_delivery" || status === "picked_up" || hasLiveRider;
+  const isBooked = (status === "booked" || status === "payment_completed") && !hasLiveRider;
+  const isTransit = (status === "in_transit" || status === "arrived_hub") && !hasLiveRider;
 
   // Counter for "updated X seconds ago"
   useEffect(() => {
@@ -110,16 +114,16 @@ export function LiveDeliveryMap({
     if (isDelivered) return null;
     if (driverLocation) return driverLocation;
     if (isDelivering) {
-      // Fallback rider position ~70% along route from origin to destination
+      // Before driver starts GPS / movement, rider is placed right at the origin hub (progress 0.0)
       return {
-        lat: effectiveOrigin.lat + (destinationCoords.lat - effectiveOrigin.lat) * 0.7,
-        lng: effectiveOrigin.lng + (destinationCoords.lng - effectiveOrigin.lng) * 0.7,
-        speed: 24,
+        lat: effectiveOrigin.lat,
+        lng: effectiveOrigin.lng,
+        speed: 0,
         heading: 45,
       };
     }
     return null;
-  }, [driverLocation, isDelivering, isDelivered, effectiveOrigin, destinationCoords]);
+  }, [driverLocation, isDelivering, isDelivered, effectiveOrigin]);
 
   // Initialize Leaflet client-side
   useEffect(() => {
@@ -262,14 +266,19 @@ export function LiveDeliveryMap({
       destMarkerRef.current.setIcon(destIcon);
     }
 
-    // 2. Origin / Hub Marker
+    // 2. Origin / Source / Hub Marker
+    const originTitle = isBooked || isDelivered ? "Source / Pickup" : isTransit ? "Logistics Hub" : "Fulfillment Hub";
+    const originIconSvg = isBooked || isDelivered
+      ? `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`
+      : `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M3 7v1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7H3l2-4h14l2 4"/><line x1="9" x2="9" y1="21" y2="11"/><line x1="15" x2="15" y1="21" y2="11"/></svg>`;
+
     const originHtml = `
       <div class="relative flex items-center justify-center">
-        <div class="h-8 w-8 rounded-full bg-slate-800 text-white flex items-center justify-center shadow-md border-2 border-white">
-          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M3 7v1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7H3l2-4h14l2 4"/><line x1="9" x2="9" y1="21" y2="11"/><line x1="15" x2="15" y1="21" y2="11"/></svg>
+        <div class="h-8 w-8 rounded-full ${isBooked || isDelivered ? "bg-indigo-600" : "bg-slate-800"} text-white flex items-center justify-center shadow-md border-2 border-white">
+          ${originIconSvg}
         </div>
-        <div class="absolute top-9 whitespace-nowrap bg-background text-muted-foreground text-[9px] font-medium px-1.5 py-0.2 rounded shadow border border-border">
-          Fulfillment Hub
+        <div class="absolute top-9 whitespace-nowrap bg-background text-muted-foreground text-[9px] font-semibold px-1.5 py-0.5 rounded shadow border border-border">
+          ${originTitle}
         </div>
       </div>
     `;
@@ -287,29 +296,29 @@ export function LiveDeliveryMap({
       }).addTo(map);
     } else {
       originMarkerRef.current.setLatLng([effectiveOrigin.lat, effectiveOrigin.lng]);
+      originMarkerRef.current.setIcon(originIcon);
     }
 
     // 3. Rider Marker (Delivery Partner Scooter/Bike) — visible during active delivery
     if (effectiveRiderLoc && !isDelivered) {
       const heading = effectiveRiderLoc.heading ?? 45;
       const riderHtml = `
-        <div class="relative flex items-center justify-center group">
+        <div class="relative flex items-center justify-center group pointer-events-auto">
           <!-- Radar ping pulse -->
-          <div class="absolute -inset-3 rounded-full bg-primary/25 animate-ping"></div>
-          <div class="absolute -inset-1 rounded-full bg-primary/30"></div>
-          <!-- Scooter circular badge with directional pointer -->
-          <div class="relative h-11 w-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-xl border-2 border-white transform transition-transform duration-300" style="transform: rotate(${heading}deg);">
-            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="18.5" cy="17.5" r="3.5"/>
-              <circle cx="5.5" cy="17.5" r="3.5"/>
-              <circle cx="15" cy="5" r="1"/>
-              <path d="M12 17.5V14l-3-3 4-3 2 3h2"/>
-            </svg>
-            <div class="absolute -top-1 w-2.5 h-2.5 bg-amber-400 rounded-full border border-white shadow-sm"></div>
+          <div class="absolute -inset-3 rounded-full bg-primary/20 animate-ping pointer-events-none"></div>
+          
+          <!-- Top-down Scooter & Driver Illustration with dynamic rotation -->
+          <div class="relative w-14 h-14 flex items-center justify-center transition-transform duration-300 drop-shadow-[0_8px_16px_rgba(0,0,0,0.65)]" style="transform: rotate(${heading}deg);">
+            <img
+              src="/scooter-driver.png"
+              alt="Delivery Driver"
+              class="w-full h-full object-contain pointer-events-none"
+            />
           </div>
+
           <!-- Rider label tag -->
-          <div class="absolute -bottom-6 whitespace-nowrap bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full shadow-md flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <div class="absolute -bottom-6 whitespace-nowrap bg-background/95 border border-border text-foreground text-[10px] font-bold px-2 py-0.5 rounded-full shadow-md flex items-center gap-1 backdrop-blur-sm">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>${partner?.name || "Delivery Partner"}</span>
           </div>
         </div>
@@ -318,8 +327,8 @@ export function LiveDeliveryMap({
       const riderIcon = L.divIcon({
         className: "custom-rider-marker",
         html: riderHtml,
-        iconSize: [44, 44],
-        iconAnchor: [22, 22],
+        iconSize: [48, 48],
+        iconAnchor: [24, 24],
       });
 
       if (!riderMarkerRef.current) {
@@ -339,7 +348,7 @@ export function LiveDeliveryMap({
 
     // 4. Road Route Polyline (OSRM)
     let isSubscribed = true;
-    const startPoint = isDelivering && effectiveRiderLoc ? effectiveRiderLoc : effectiveOrigin;
+    const startPoint = effectiveRiderLoc ? effectiveRiderLoc : effectiveOrigin;
 
     async function fetchRoadRoute() {
       const url = `https://router.project-osrm.org/route/v1/driving/${startPoint.lng},${startPoint.lat};${destinationCoords.lng},${destinationCoords.lat}?overview=full&geometries=geojson`;
@@ -398,13 +407,17 @@ export function LiveDeliveryMap({
 
     fetchRoadRoute();
 
-    // Auto-fit bounds on initial load
+    // Auto-fit bounds on initial load with generous top padding so banner doesn't obstruct route
     if (viewMode === "fit") {
       const bounds = L.latLngBounds([
         [destinationCoords.lat, destinationCoords.lng],
         [startPoint.lat, startPoint.lng],
       ]);
-      map.fitBounds(bounds, { padding: [70, 70], maxZoom: 16 });
+      map.fitBounds(bounds, {
+        paddingTopLeft: [70, 160], // Extra top padding to ensure rider/hub is never hidden under the top-left status banner
+        paddingBottomRight: [70, 70],
+        maxZoom: 16,
+      });
     }
 
     return () => {
@@ -428,12 +441,16 @@ export function LiveDeliveryMap({
     if (!mapInstanceRef.current || !LRef.current) return;
     setViewMode("fit");
     const L = LRef.current;
-    const startPoint = isDelivering && effectiveRiderLoc ? effectiveRiderLoc : effectiveOrigin;
+    const startPoint = effectiveRiderLoc ? effectiveRiderLoc : effectiveOrigin;
     const bounds = L.latLngBounds([
       [destinationCoords.lat, destinationCoords.lng],
       [startPoint.lat, startPoint.lng],
     ]);
-    mapInstanceRef.current.fitBounds(bounds, { padding: [70, 70], maxZoom: 16 });
+    mapInstanceRef.current.fitBounds(bounds, {
+      paddingTopLeft: [70, 160],
+      paddingBottomRight: [70, 70],
+      maxZoom: 16,
+    });
   }
 
   function handleFocusRider() {
@@ -448,8 +465,26 @@ export function LiveDeliveryMap({
     mapInstanceRef.current.flyTo([destinationCoords.lat, destinationCoords.lng], 16, { duration: 1 });
   }
 
-  const displayEta = routeInfo ? `${routeInfo.durationMinutes} mins` : "8-12 mins";
-  const displayDist = routeInfo ? `${routeInfo.distanceKm} km` : "2.2 km";
+  // Check if driver has reached destination (< 80 meters away or speed=0 right at dest)
+  const isDriverArrived = React.useMemo(() => {
+    if (!effectiveRiderLoc || isDelivered) return false;
+    const dLat = Math.abs(effectiveRiderLoc.lat - destinationCoords.lat);
+    const dLng = Math.abs(effectiveRiderLoc.lng - destinationCoords.lng);
+    return dLat < 0.0009 && dLng < 0.0009;
+  }, [effectiveRiderLoc?.lat, effectiveRiderLoc?.lng, destinationCoords.lat, destinationCoords.lng, isDelivered]);
+
+  const displayEta = isDriverArrived
+    ? "Arrived"
+    : routeInfo
+      ? routeInfo.durationMinutes <= 1
+        ? "Arriving now"
+        : `${routeInfo.durationMinutes} mins`
+      : "8-12 mins";
+  const displayDist = isDriverArrived
+    ? "0 m"
+    : routeInfo
+      ? `${routeInfo.distanceKm} km`
+      : "2.2 km";
 
   return (
     <div className={`relative overflow-hidden rounded-2xl border bg-card shadow-lg ${className ?? "h-96 sm:h-[450px]"}`}>
@@ -457,8 +492,8 @@ export function LiveDeliveryMap({
       <div ref={mapContainerRef} className="w-full h-full z-0 bg-muted/20" />
 
       {/* Floating Status Banner */}
-      <div className="absolute top-3 left-3 right-3 sm:right-auto z-10 flex flex-col gap-2 max-w-sm pointer-events-none">
-        <div className="bg-background/95 backdrop-blur-md border border-border/80 rounded-xl p-3.5 shadow-lg pointer-events-auto space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+      <div className="absolute top-3 left-3 z-10 flex flex-col gap-2 max-w-sm pointer-events-none">
+        <div className="bg-background/95 backdrop-blur-md border border-border/80 rounded-xl p-3 sm:p-3.5 shadow-lg pointer-events-auto space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               {isDelivered ? (
@@ -466,6 +501,13 @@ export function LiveDeliveryMap({
                   <span className="relative flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
                   <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                     Delivered Successfully
+                  </span>
+                </>
+              ) : isDriverArrived ? (
+                <>
+                  <span className="relative flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    Reached Your Destination
                   </span>
                 </>
               ) : isDelivering ? (
@@ -488,65 +530,89 @@ export function LiveDeliveryMap({
               )}
             </div>
 
-            <div className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
-              <Clock className="h-3 w-3" />
-              <span>
-                {isDelivered
-                  ? "Completed"
-                  : isDelivering
-                    ? lastSeenSeconds < 5
-                      ? "Live now"
-                      : `${lastSeenSeconds}s ago`
-                    : "On schedule"}
-              </span>
+            <div className="flex items-center gap-2">
+              <div className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
+                <Clock className="h-3 w-3" />
+                <span>
+                  {isDelivered
+                    ? "Completed"
+                    : isDriverArrived
+                      ? "At doorstep"
+                      : isDelivering
+                        ? lastSeenSeconds < 5
+                          ? "Live now"
+                          : `${lastSeenSeconds}s ago`
+                        : "On schedule"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBannerCollapsed((prev) => !prev)}
+                className="h-5 w-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                title={isBannerCollapsed ? "Expand card" : "Minimize card"}
+              >
+                {isBannerCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+              </button>
             </div>
           </div>
 
-          <div className="flex items-baseline justify-between gap-3 pt-0.5">
-            <div>
-              {isDelivered ? (
-                <>
-                  <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                    <CheckCircle2 className="h-6 w-6 shrink-0" />
-                    <span>Package Delivered</span>
+          {!isBannerCollapsed && (
+            <div className="flex items-baseline justify-between gap-3 pt-0.5 animate-in fade-in duration-200">
+              <div>
+                {isDelivered ? (
+                  <>
+                    <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-6 w-6 shrink-0" />
+                      <span>Package Delivered</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                      Delivered to {destinationAddress || "recipient address"}
+                    </p>
+                  </>
+                ) : isDriverArrived ? (
+                  <>
+                    <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-6 w-6 shrink-0" />
+                      <span>Reached your destination</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                      {partner?.name ? `${partner.name} has arrived at your address` : "Delivery partner has arrived at your address"}
+                    </p>
+                  </>
+                ) : isDelivering ? (
+                  <>
+                    <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-foreground flex items-center gap-1.5">
+                      <span>{displayEta}</span>
+                      <span className="text-xs font-normal text-muted-foreground">{displayEta === "Arriving now" ? "" : "away"}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                      {partner?.name ? `${partner.name} is on the way` : "Delivery partner on route"} · {displayDist}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-foreground">
+                      {isTransit ? "In Transit to Hub" : "Order Placed"}
+                    </div>
+                    <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                      {isTransit ? "Dispatched on logistics corridor" : "Preparing package for pickup"} · {displayDist}
+                    </p>
+                  </>
+                )}
+              </div>
+
+              {deliveryOtp && (
+                <div className="text-right shrink-0 bg-primary/10 border border-primary/25 rounded-lg px-2.5 py-1">
+                  <div className="text-[9px] uppercase font-semibold text-primary">
+                    {isDelivered ? "OTP Status" : "Delivery OTP"}
                   </div>
-                  <p className="text-xs text-muted-foreground font-medium mt-0.5">
-                    Delivered to {destinationAddress || "recipient address"}
-                  </p>
-                </>
-              ) : isDelivering ? (
-                <>
-                  <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-foreground flex items-center gap-1.5">
-                    <span>{displayEta}</span>
-                    <span className="text-xs font-normal text-muted-foreground">away</span>
+                  <div className="font-mono text-base font-bold tracking-widest text-primary">
+                    {isDelivered ? "VERIFIED" : deliveryOtp}
                   </div>
-                  <p className="text-xs text-muted-foreground font-medium mt-0.5">
-                    {partner?.name ? `${partner.name} is on the way` : "Delivery partner on route"} · {displayDist}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-foreground">
-                    {isTransit ? "In Transit to Hub" : "Order Placed"}
-                  </div>
-                  <p className="text-xs text-muted-foreground font-medium mt-0.5">
-                    {isTransit ? "Dispatched on logistics corridor" : "Preparing package for pickup"} · {displayDist}
-                  </p>
-                </>
+                </div>
               )}
             </div>
-
-            {deliveryOtp && (
-              <div className="text-right shrink-0 bg-primary/10 border border-primary/25 rounded-lg px-2.5 py-1">
-                <div className="text-[9px] uppercase font-semibold text-primary">
-                  {isDelivered ? "OTP Status" : "Delivery OTP"}
-                </div>
-                <div className="font-mono text-base font-bold tracking-widest text-primary">
-                  {isDelivered ? "VERIFIED" : deliveryOtp}
-                </div>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
 

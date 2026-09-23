@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { StatusBadge } from "@/components/shiplync/StatusBadge";
 import { RouteMap } from "@/components/shiplync/RouteMap";
 import { LiveDeliveryMap } from "@/components/shiplync/LiveDeliveryMap";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toBadgeStatus, toProgress } from "@/lib/api-hooks";
 import { getDeliveryOtp } from "@/lib/otp";
+import { resolveLocationCoords } from "@/lib/distance";
 import { ShieldCheck, Camera, ArrowLeft, Share2, AlertTriangle, RotateCcw, CheckCircle2, XCircle, KeyRound, Copy, Map, Compass } from "lucide-react";
 import { toast } from "sonner";
 
@@ -38,6 +39,7 @@ type TrackData = {
 
 function TrackShipment() {
   const { id } = useParams({ from: "/customer/track/$id" });
+  const queryClient = useQueryClient();
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ["customer-track", id],
     queryFn: async () => {
@@ -59,13 +61,13 @@ function TrackShipment() {
   const [liveData, setLiveData] = useState<{
     liveLocation: any;
     partner: any;
-    destinationCoords: { lat: number; lng: number };
-    originCoords: { lat: number; lng: number };
+    destinationCoords: { lat: number; lng: number } | null;
+    originCoords: { lat: number; lng: number } | null;
   }>({
     liveLocation: data?.liveLocation ?? null,
     partner: data?.partner ?? null,
-    destinationCoords: data?.destinationCoords ?? { lat: 9.5916, lng: 76.5222 },
-    originCoords: data?.originCoords ?? { lat: 9.4678, lng: 76.5412 },
+    destinationCoords: data?.destinationCoords ?? null,
+    originCoords: data?.originCoords ?? null,
   });
 
   const [mapType, setMapType] = useState<"live" | "schematic">("live");
@@ -73,16 +75,75 @@ function TrackShipment() {
   // Keep liveData in sync if loader finishes resolving
   useEffect(() => {
     if (data) {
+      const s = data.shipment;
+      const resolvedDest = data.destinationCoords || (s ? resolveLocationCoords({
+        city: s.receiverCity,
+        state: s.receiverState,
+        pincode: s.receiverPincode,
+        addressLine: s.receiverAddressLine,
+      }) : null);
+
+      const resolvedOrigin = data.originCoords || (resolvedDest ? {
+        lat: resolvedDest.lat + 0.014,
+        lng: resolvedDest.lng - 0.014,
+      } : null);
+
       setLiveData({
         liveLocation: data.liveLocation ?? null,
         partner: data.partner ?? null,
-        destinationCoords: data.destinationCoords ?? { lat: 9.5916, lng: 76.5222 },
-        originCoords: data.originCoords ?? { lat: 9.4678, lng: 76.5412 },
+        destinationCoords: resolvedDest,
+        originCoords: resolvedOrigin,
       });
     }
   }, [data]);
 
-  // Real-time polling every 3 seconds for live partner location updates
+  // 1. Cross-tab real-time BroadcastChannel listener (Instant 0ms update when driver starts sim / drives)
+  useEffect(() => {
+    const s = data?.shipment;
+    if (!s) return;
+
+    if (typeof window === "undefined" || !("BroadcastChannel" in window)) return;
+    const bc = new BroadcastChannel("shiplync_driver_tracking");
+
+    bc.onmessage = (event) => {
+      const msg = event.data;
+      if (!msg) return;
+
+      const isForMe =
+        (msg.trackingId && msg.trackingId.toLowerCase() === s.trackingId.toLowerCase()) ||
+        (msg.shipmentId && msg.shipmentId === s.id);
+
+      if (isForMe && msg.lat && msg.lng) {
+        setLiveData((prev) => ({
+          ...prev,
+          liveLocation: {
+            lat: msg.lat,
+            lng: msg.lng,
+            speed: msg.speed ?? null,
+            heading: msg.heading ?? null,
+            accuracy: msg.accuracy ?? null,
+            updatedAt: new Date().toISOString(),
+          },
+        }));
+
+        if (msg.status && msg.status !== s.status) {
+          queryClient.setQueryData(["customer-track", id], (old: any) => {
+            if (!old || !old.shipment) return old;
+            return {
+              ...old,
+              shipment: { ...old.shipment, status: msg.status },
+            };
+          });
+        }
+      }
+    };
+
+    return () => {
+      bc.close();
+    };
+  }, [data?.shipment?.trackingId, data?.shipment?.id, data?.shipment?.status, id, queryClient]);
+
+  // 2. Real-time polling every 2.5 seconds for live partner location & status updates
   useEffect(() => {
     const s = data?.shipment;
     if (!s || ["delivered", "cancelled", "returned"].includes(s.status)) return;
@@ -102,17 +163,28 @@ function TrackShipment() {
               originCoords: json.originCoords || prev.originCoords,
             }));
           }
+
+          if (json.status && json.status !== s.status) {
+            queryClient.setQueryData(["customer-track", id], (old: any) => {
+              if (!old || !old.shipment) return old;
+              return {
+                ...old,
+                shipment: { ...old.shipment, status: json.status },
+                partner: json.partner || old.partner,
+              };
+            });
+          }
         }
       } catch {
         // Silently ignore transient network blip
       }
-    }, 3000);
+    }, 2500);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [data?.shipment?.trackingId, data?.shipment?.status]);
+  }, [data?.shipment?.trackingId, data?.shipment?.status, id, queryClient]);
 
   if (isError) {
     const notFound = (error as any)?.status === 404;
@@ -288,9 +360,17 @@ function TrackShipment() {
               </div>
             </div>
 
-            {mapType === "live" ? (
+            {mapType === "live" && (liveData.destinationCoords || s) ? (
               <LiveDeliveryMap
-                destinationCoords={liveData.destinationCoords}
+                destinationCoords={
+                  liveData.destinationCoords ||
+                  resolveLocationCoords({
+                    city: s.receiverCity,
+                    state: s.receiverState,
+                    pincode: s.receiverPincode,
+                    addressLine: s.receiverAddressLine,
+                  })
+                }
                 destinationAddress={`${s.receiverAddressLine}, ${s.receiverCity}, ${s.receiverState} ${s.receiverPincode}`}
                 driverLocation={liveData.liveLocation}
                 originCoords={liveData.originCoords}

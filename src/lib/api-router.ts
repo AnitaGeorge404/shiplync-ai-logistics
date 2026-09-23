@@ -114,12 +114,10 @@ const updateStatusSchema = z.object({
 // Every PATCH /status request is checked against this map before being
 // applied — the frontend is never trusted to enforce valid transitions.
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-  // "arrived_hub" is reachable directly from "booked" because Hub Intake is
-  // this app's first physical checkpoint — there's no separate courier
-  // pickup-scan step in the UI, so requiring "picked_up" first would make
-  // the real Hub Intake screen unusable.
-  booked: ["payment_completed", "picked_up", "arrived_hub", "cancelled"],
-  payment_completed: ["picked_up", "arrived_hub", "cancelled"],
+  // "arrived_hub" and "out_for_delivery" are reachable directly from "booked" / "payment_completed"
+  // so delivery partner follow-ups or direct dispatch transitions work smoothly.
+  booked: ["payment_completed", "picked_up", "arrived_hub", "out_for_delivery", "cancelled"],
+  payment_completed: ["picked_up", "arrived_hub", "out_for_delivery", "cancelled"],
   picked_up: ["arrived_hub", "in_transit", "out_for_delivery", "cancelled"],
   arrived_hub: ["in_transit", "out_for_delivery", "cancelled"],
   in_transit: ["arrived_hub", "out_for_delivery"],
@@ -289,7 +287,53 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         accuracy: parsed.data.accuracy ?? null,
       });
 
-      return json({ ok: true, location: loc });
+      // If the shipment is currently in a pre-delivery or follow-up/attempted state,
+      // starting GPS broadcast/simulation means the trip to customer has begun.
+      // Automatically advance its status to out_for_delivery.
+      try {
+        const [existing] = await db
+          .select()
+          .from(shipments)
+          .where(
+            parsed.data.shipmentId
+              ? or(eq(shipments.id, parsed.data.shipmentId), eq(shipments.trackingId, parsed.data.shipmentId))
+              : eq(shipments.trackingId, parsed.data.trackingId || "")
+          )
+          .limit(1);
+
+        if (
+          existing &&
+          !["delivered", "cancelled", "returned", "out_for_delivery"].includes(existing.status)
+        ) {
+          await db
+            .update(shipments)
+            .set({
+              status: "out_for_delivery",
+              updatedAt: new Date(),
+            })
+            .where(eq(shipments.id, existing.id));
+
+          await db.insert(shipmentEvents).values({
+            shipmentId: existing.id,
+            status: "out_for_delivery",
+            location: existing.currentLocationCity || existing.senderCity,
+            note: "Delivery partner is on the way with your package.",
+            actorUserId: user?.id || existing.assignedAgentId,
+          });
+
+          await db.insert(notifications).values({
+            userId: existing.customerId,
+            type: "route_changed",
+            title: `Shipment ${existing.trackingId} is out for delivery`,
+            message: "Your delivery partner has started the trip to your address.",
+            shipmentId: existing.id,
+          });
+        }
+      } catch (err) {
+        console.warn("[api-router] Non-fatal error auto-updating status on driver broadcast:", err);
+      }
+
+      return json({ ok: true, location: loc, status: "out_for_delivery" });
     }
 
     // ---------------------------------------------------------------
@@ -477,6 +521,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
           senderAddressLine: shipments.senderAddressLine,
           senderLat: shipments.senderLat,
           senderLng: shipments.senderLng,
+          currentHubId: shipments.currentHubId,
           currentLocationCity: shipments.currentLocationCity,
           estimatedDeliveryAt: shipments.estimatedDeliveryAt,
         })
@@ -495,14 +540,19 @@ export async function handleApiRequest(request: Request): Promise<Response> {
             addressLine: shipment.receiverAddressLine,
           });
 
-      // Once a hub scan has set a demo current-location city, the map's
-      // "hub" pin and the driver's simulated starting point both move to
-      // there instead of staying pinned at the original pickup city — a
-      // shipment scanned near its destination shouldn't still show its
-      // rider setting off from hundreds of km away at pickup.
-      const rawOrigin = shipment.currentLocationCity
-        ? resolveLocationCoords({ city: shipment.currentLocationCity, state: shipment.receiverState })
-        : shipment.senderLat && shipment.senderLng
+      // Coordinate Resolution:
+      // 1. When booked or delivered/returned: origin is the sender's location (pickup point) showing the whole journey.
+      // 2. When in_transit / arrived_hub (scanned at a hub): origin is the scanned hub.
+      // 3. When out_for_delivery / delivery_attempted: origin is the local delivery hub / dark store.
+      const isBooked = shipment.status === "booked" || shipment.status === "payment_completed";
+      const isDeliveredOrReturned = shipment.status === "delivered" || shipment.status === "returned";
+      const isLastMile = shipment.status === "out_for_delivery" || shipment.status === "delivery_attempted";
+
+      let hubCoords: { lat: number; lng: number } | null = null;
+
+      if (isBooked || isDeliveredOrReturned) {
+        // Booked or Delivered: map origin starts strictly at the sender / pickup location
+        const senderLocation = shipment.senderLat && shipment.senderLng
           ? { lat: shipment.senderLat, lng: shipment.senderLng }
           : resolveLocationCoords({
               city: shipment.senderCity,
@@ -510,15 +560,45 @@ export async function handleApiRequest(request: Request): Promise<Response> {
               pincode: shipment.senderPincode,
               addressLine: shipment.senderAddressLine,
             });
+        hubCoords = senderLocation;
+      } else if (!isLastMile && shipment.currentHubId) {
+        // Scanned at intermediate / origin hub
+        const [hub] = await db
+          .select({ lat: hubs.lat, lng: hubs.lng })
+          .from(hubs)
+          .where(eq(hubs.id, shipment.currentHubId))
+          .limit(1);
+        if (hub && hub.lat && hub.lng) {
+          hubCoords = { lat: hub.lat, lng: hub.lng };
+        }
+      }
 
-      const { origin: originCoords, dest: destCoords } = ensureDistinctCoords(rawOrigin, rawDest);
+      if (!hubCoords) {
+        const hubCity = isLastMile
+          ? shipment.receiverCity
+          : shipment.currentLocationCity ||
+            getNearestMajorLogisticsCity({
+              city: shipment.receiverCity,
+              state: shipment.receiverState,
+              pincode: shipment.receiverPincode,
+            });
+
+        hubCoords = resolveLocationCoords({
+          city: hubCity,
+          state: shipment.receiverState,
+          pincode: shipment.receiverPincode,
+          addressLine: isLastMile ? shipment.receiverAddressLine : undefined,
+        });
+      }
+
+      const { origin: originCoords, dest: destCoords } = ensureDistinctCoords(hubCoords, rawDest);
 
       let liveLoc = getDriverLocation(shipment.id) || getDriverLocation(shipment.trackingId);
       if (!liveLoc && (shipment.status === "out_for_delivery" || shipment.status === "picked_up")) {
         const pos = generateInterpolatedPosition(
           originCoords,
           destCoords,
-          shipment.status === "out_for_delivery" ? 0.7 : 0.25
+          0.0
         );
         liveLoc = {
           shipmentId: shipment.id,
@@ -526,11 +606,33 @@ export async function handleApiRequest(request: Request): Promise<Response> {
           agentId: shipment.assignedAgentId ?? undefined,
           lat: pos.lat,
           lng: pos.lng,
-          speed: 25,
+          speed: 0,
           heading: pos.heading,
           accuracy: 6,
           updatedAt: new Date().toISOString(),
         };
+      }
+
+      // Resolve assigned partner and vehicle details
+      let partner: { name: string; phone: string | null; role: string; vehicle?: { registrationNumber: string; type: string } | null } | null = null;
+      if (shipment.assignedAgentId) {
+        const [agentUser] = await db
+          .select({ name: userTable.name, phone: userTable.phone, role: userTable.role })
+          .from(userTable)
+          .where(eq(userTable.id, shipment.assignedAgentId))
+          .limit(1);
+        if (agentUser) {
+          let vehicleDetails = null;
+          if (shipment.assignedVehicleId) {
+            const [veh] = await db
+              .select({ registrationNumber: vehicles.registrationNumber, type: vehicles.type })
+              .from(vehicles)
+              .where(eq(vehicles.id, shipment.assignedVehicleId))
+              .limit(1);
+            if (veh) vehicleDetails = veh;
+          }
+          partner = { ...agentUser, vehicle: vehicleDetails };
+        }
       }
 
       return json({
@@ -538,6 +640,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         liveLocation: liveLoc,
         destinationCoords: destCoords,
         originCoords,
+        partner,
       });
     }
 
@@ -558,16 +661,21 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         .where(eq(shipmentEvents.shipmentId, shipment.id))
         .orderBy(shipmentEvents.createdAt);
 
-      // Resolve the real current hub name, if any, so the tracking UI can
-      // show "Arrived at <Hub Name>" instead of a generic status string.
+      // Resolve the real current hub name and coordinates
       let currentHubName: string | null = null;
+      let hubCoords: { lat: number; lng: number } | null = null;
       if (shipment.currentHubId) {
         const [hub] = await db
-          .select({ name: hubs.name })
+          .select({ name: hubs.name, lat: hubs.lat, lng: hubs.lng })
           .from(hubs)
           .where(eq(hubs.id, shipment.currentHubId))
           .limit(1);
-        currentHubName = hub?.name ?? null;
+        if (hub) {
+          currentHubName = hub.name ?? null;
+          if (hub.lat && hub.lng) {
+            hubCoords = { lat: hub.lat, lng: hub.lng };
+          }
+        }
       }
 
       // Real delivery-attempt and exception records for this shipment
@@ -593,14 +701,18 @@ export async function handleApiRequest(request: Request): Promise<Response> {
             addressLine: shipment.receiverAddressLine,
           });
 
-      // Once a hub scan has set a demo current-location city, the map's
-      // "hub" pin and the driver's simulated starting point both move to
-      // there instead of staying pinned at the original pickup city — a
-      // shipment scanned near its destination shouldn't still show its
-      // rider setting off from hundreds of km away at pickup.
-      const rawOrigin = shipment.currentLocationCity
-        ? resolveLocationCoords({ city: shipment.currentLocationCity, state: shipment.receiverState })
-        : shipment.senderLat && shipment.senderLng
+      // Coordinate Resolution:
+      // 1. When booked or delivered/returned: origin is the sender's location (pickup point) showing the full completed journey.
+      // 2. When in_transit / arrived_hub (scanned at a hub): origin is the scanned hub.
+      // 3. When out_for_delivery / delivery_attempted: origin is the local delivery hub / dark store.
+      const isBooked = shipment.status === "booked" || shipment.status === "payment_completed";
+      const isDeliveredOrReturned = shipment.status === "delivered" || shipment.status === "returned";
+      const isLastMile = shipment.status === "out_for_delivery" || shipment.status === "delivery_attempted";
+
+      let originPointCoords: { lat: number; lng: number } | null = null;
+
+      if (isBooked || isDeliveredOrReturned) {
+        originPointCoords = shipment.senderLat && shipment.senderLng
           ? { lat: shipment.senderLat, lng: shipment.senderLng }
           : resolveLocationCoords({
               city: shipment.senderCity,
@@ -608,8 +720,38 @@ export async function handleApiRequest(request: Request): Promise<Response> {
               pincode: shipment.senderPincode,
               addressLine: shipment.senderAddressLine,
             });
+      } else if (!isLastMile && hubCoords) {
+        originPointCoords = hubCoords;
+      } else if (!isLastMile && shipment.currentHubId) {
+        const [hub] = await db
+          .select({ lat: hubs.lat, lng: hubs.lng })
+          .from(hubs)
+          .where(eq(hubs.id, shipment.currentHubId))
+          .limit(1);
+        if (hub && hub.lat && hub.lng) {
+          originPointCoords = { lat: hub.lat, lng: hub.lng };
+        }
+      }
 
-      const { origin: originCoords, dest: destCoords } = ensureDistinctCoords(rawOrigin, rawDest);
+      if (!originPointCoords) {
+        const hubCity = isLastMile
+          ? shipment.receiverCity
+          : shipment.currentLocationCity ||
+            getNearestMajorLogisticsCity({
+              city: shipment.receiverCity,
+              state: shipment.receiverState,
+              pincode: shipment.receiverPincode,
+            });
+
+        originPointCoords = resolveLocationCoords({
+          city: hubCity,
+          state: shipment.receiverState,
+          pincode: shipment.receiverPincode,
+          addressLine: isLastMile ? shipment.receiverAddressLine : undefined,
+        });
+      }
+
+      const { origin: originCoords, dest: destCoords } = ensureDistinctCoords(originPointCoords, rawDest);
 
       // Resolve assigned partner and vehicle details
       let partner: { name: string; phone: string | null; role: string; vehicle?: { registrationNumber: string; type: string } | null } | null = null;
@@ -638,7 +780,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         const pos = generateInterpolatedPosition(
           originCoords,
           destCoords,
-          shipment.status === "out_for_delivery" ? 0.7 : 0.25
+          0.0
         );
         liveLoc = {
           shipmentId: shipment.id,
@@ -646,7 +788,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
           agentId: shipment.assignedAgentId ?? undefined,
           lat: pos.lat,
           lng: pos.lng,
-          speed: 25,
+          speed: 0,
           heading: pos.heading,
           accuracy: 6,
           updatedAt: new Date().toISOString(),
