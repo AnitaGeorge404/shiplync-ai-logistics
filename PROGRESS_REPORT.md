@@ -5,7 +5,6 @@
 **Institution:** IIIT Kottayam
 
 ---
-
 ## 1. What ShipLync is
 
 ShipLync is a courier & logistics management platform covering the full shipment lifecycle — booking, hub intake/dispatch, delivery, exceptions/returns — across four roles: **Customer**, **Delivery Agent**, **Hub Staff**, and **Administrator**, as defined in the SRS (v1.0, approved).
